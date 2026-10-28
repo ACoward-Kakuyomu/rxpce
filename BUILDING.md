@@ -18,22 +18,22 @@ WTL、MCS6502、picojson、libchdr とその依存ソースは同梱していま
 
 ```powershell
 cmake -S . -B build -A x64
-cmake --build build --config Release --target rxpce cue_materialize --parallel
+cmake --build build --config Release --target rxpce cue_materialize rxpce_cd_dump --parallel
 ```
 
-実行ファイルは `build/Release/rxpce.exe` と `build/Release/cue_materialize.exe` です。片方だけ必要なら `--target rxpce` または `--target cue_materialize` とします。Debug は `--config Debug` でビルドできます。ARM64、Win32、MinGW は今回のビルド対象外です。
+実行ファイルは `build/Release/rxpce.exe`、`build/Release/cue_materialize.exe`、`build/Release/rxpce_cd_dump.exe` です。いずれか1つだけ必要なら `--target rxpce`、`--target cue_materialize` または `--target rxpce_cd_dump` とします。Debug は `--config Debug` でビルドできます。ARM64、Win32、MinGW は今回のビルド対象外です。
 
 起動に必要な Visual C++ ランタイムは [README](README.md) を参照してください。ROM、BIOS、CD イメージは含まれません。
 
 ### 配布時の資料
 
-実行ファイルと一緒に、出力先にコピーされた README.md、MANUAL.md、BUILDING.md、CUE_MATERIALIZE.md、LICENSE.md、LICENSES/、THIRD_PARTY_NOTICES.md、および third-party/ 内のライセンス・導入元資料を保持してください。ソース配布では各依存先の権利表示も維持します。変換補助ツールの使い方は [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md) を参照してください。
+実行ファイルと一緒に、出力先にコピーされた README.md、MANUAL.md、BUILDING.md、CUE_MATERIALIZE.md、CD_DUMP.md、LICENSE.md、LICENSES/、THIRD_PARTY_NOTICES.md、および third-party/ 内のライセンス・導入元資料を保持してください。ソース配布では各依存先の権利表示も維持します。CD取り込みは [CD_DUMP.md](CD_DUMP.md)、変換補助ツールの使い方は [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md) を参照してください。
 
 ### GitHub Release の自動作成
 
 公開リポジトリの `.github/workflows/release.yml` は、`v1.0.0` のような **vX.Y.Z 形式の正式版タグの push** で動作します。`v` から始まらないタグは対象外、プレリリース名を含むタグは検証で拒否します。タグの版は CMakeLists.txt の `project VERSION` と rxpce.exe のバージョンに一致する必要があります。版を上げる際は `src/rxpce.rc` のバージョン情報も更新してください。
 
-Windows 2022 のランナーで x64 Release の両実行ファイルをビルドし、必要な文書とライセンスを含む `rxpce-v1.0.0-windows-x64.zip` と `.zip.sha256` を Release に添付します。ZIP の中には同名のルートフォルダーがあります。PDB、静的ライブラリ、ROM、BIOS、設定・セーブは含めません。Visual C++ 再頒布可能パッケージは同梱しません。
+Windows 2022 のランナーで x64 Release の3つの実行ファイルをビルドし、必要な文書とライセンスを含む `rxpce-v1.0.0-windows-x64.zip` と `.zip.sha256` を Release に添付します。ZIP の中には同名のルートフォルダーがあります。PDB、静的ライブラリ、ROM、BIOS、設定・セーブは含めません。Visual C++ 再頒布可能パッケージは同梱しません。
 
 ワークフローを含むコミットを公開リポジトリへ push した後、リリースするコミットにタグを付け、明示的にそのタグを push します。以下は公開リポジトリ内で利用者が実行する例です。
 
@@ -68,22 +68,22 @@ Run from the source root in PowerShell or a command prompt:
 
 ```powershell
 cmake -S . -B build -A x64
-cmake --build build --config Release --target rxpce cue_materialize --parallel
+cmake --build build --config Release --target rxpce cue_materialize rxpce_cd_dump --parallel
 ```
 
-The executables are `build/Release/rxpce.exe` and `build/Release/cue_materialize.exe`. To build only one, use `--target rxpce` or `--target cue_materialize`. Use `--config Debug` for a Debug build. ARM64, Win32 and MinGW are outside this build's scope.
+The executables are `build/Release/rxpce.exe`, `build/Release/cue_materialize.exe` and `build/Release/rxpce_cd_dump.exe`. To build only one, use `--target rxpce`, `--target cue_materialize`, or `--target rxpce_cd_dump`. Use `--config Debug` for a Debug build. ARM64, Win32 and MinGW are outside this build's scope.
 
 See [README](README.md#english) for runtime requirements. ROMs, BIOS files and CD images are not included.
 
 ### Distribution documents
 
-Keep the copied README.md, MANUAL.md, BUILDING.md, CUE_MATERIALIZE.md, LICENSE.md, LICENSES/, THIRD_PARTY_NOTICES.md and the license/provenance documents under third-party/ with the executables. Source distributions must also retain dependency notices. See [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md#english) for the conversion helper.
+Keep the copied README.md, MANUAL.md, BUILDING.md, CUE_MATERIALIZE.md, CD_DUMP.md, LICENSE.md, LICENSES/, THIRD_PARTY_NOTICES.md and the license/provenance documents under third-party/ with the executables. Source distributions must also retain dependency notices. See [CD_DUMP.md](CD_DUMP.md#english) for CD capture and [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md#english) for the conversion helper.
 
 ### Automated GitHub Releases
 
 In the public repository, `.github/workflows/release.yml` runs on pushes of **stable vX.Y.Z tags**, for example `v1.0.0`. Tags without the `v` prefix do not trigger it; prerelease tag names fail validation. The version must match both the CMake `project VERSION` and rxpce.exe. Update `src/rxpce.rc` version metadata when changing versions.
 
-A Windows 2022 runner builds both x64 Release executables. The workflow attaches `rxpce-v1.0.0-windows-x64.zip` and `.zip.sha256` to the Release. The ZIP contains a folder of the same base name, the executables and required documentation/licenses. PDBs, static libraries, game/BIOS images, settings, saves and the Visual C++ Redistributable are not bundled.
+A Windows 2022 runner builds all three x64 Release executables. The workflow attaches `rxpce-v1.0.0-windows-x64.zip` and `.zip.sha256` to the Release. The ZIP contains a folder of the same base name, the executables and required documentation/licenses. PDBs, static libraries, game/BIOS images, settings, saves and the Visual C++ Redistributable are not bundled.
 
 First push the commit containing the workflow to the public repository. Then tag the intended release commit and explicitly push that tag, for example:
 

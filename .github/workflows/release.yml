@@ -33,10 +33,10 @@ jobs:
         run: ./tools/package_release.ps1 -Tag $env:RELEASE_TAG -ValidateOnly
 
       - name: Configure Windows x64
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRXPCE_BUILD_CD_DUMP=ON
 
       - name: Build Release binaries
-        run: cmake --build build --config Release --target rxpce cue_materialize --parallel 4
+        run: cmake --build build --config Release --target rxpce cue_materialize rxpce_cd_dump --parallel 4
 
       - name: Package binaries and license documents
         run: ./tools/package_release.ps1 -Tag $env:RELEASE_TAG

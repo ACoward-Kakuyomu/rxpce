@@ -4,6 +4,8 @@
 
 ## 日本語
 
+実CDからCUE＋BINを作成する独立ツールの操作は [CD_DUMP.md](CD_DUMP.md) を参照してください。
+
 ### 1. 起動とゲームの開き方
 
 `rxpce.exe`を起動し、`Game → Open...`でイメージを選択します。別のイメージを開くと、現在のエミュレーションを停止して新しいゲームを開始します。ファイル選択のキャンセルは、現在のゲームを切り替えません。
@@ -202,6 +204,8 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 再現状況を記録するときは、rxpceの版、Windows環境、ゲーム名・版、イメージ形式、操作手順、入力/音声/倍率/速度設定を揃えてください。詳細ログが必要な場合はAdvancedで有効にし、ゲームを開き直して再現します。ログにはファイルパスが含まれるため、共有前に内容を確認してください。ROMやBIOSのファイルを送る必要はありません。
 
 ## English
+
+See [CD_DUMP.md](CD_DUMP.md#english) for the standalone tool that captures physical CDs as CUE/BIN images.
 
 See the [README](README.md#english) for installation and requirements. Menu and setting names below match the English UI.
 

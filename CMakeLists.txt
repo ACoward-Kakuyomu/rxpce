@@ -57,7 +57,7 @@ target_link_libraries(rxpce PRIVATE host_paths machine_core machine_state cartri
 target_link_options(rxpce PRIVATE "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/rxpce.manifest")
 function(rxpce_copy_notices target)
 foreach(document IN ITEMS
-    LICENSE.md README.md MANUAL.md BUILDING.md CUE_MATERIALIZE.md THIRD_PARTY_NOTICES.md
+    LICENSE.md README.md MANUAL.md BUILDING.md CUE_MATERIALIZE.md CD_DUMP.md THIRD_PARTY_NOTICES.md
     LICENSES/fpce-xpce.txt LICENSES/PolyForm-Noncommercial-1.0.0.txt
     third-party/MCS6502/LICENSE.TXT
     third-party/libchdr/LICENSES.rxpce.txt third-party/libchdr/README.rxpce.md
@@ -71,6 +71,20 @@ endforeach()
 endfunction()
 rxpce_copy_notices(rxpce)
 rxpce_copy_notices(cue_materialize)
+
+option(RXPCE_BUILD_CD_DUMP "Build standalone physical CD capture tool" ON)
+if(RXPCE_BUILD_CD_DUMP)
+    add_library(cd_dump_model STATIC src/cd_dump/model.cpp src/cd_dump/reader.cpp src/cd_dump/layout.cpp src/cd_dump/capture.cpp)
+    target_include_directories(cd_dump_model PUBLIC src)
+    add_library(cd_dump_store STATIC src/cd_dump/store.cpp)
+    target_link_libraries(cd_dump_store PUBLIC cd_dump_model PRIVATE bcrypt)
+    target_include_directories(cd_dump_store SYSTEM PRIVATE third-party/picojson)
+    add_executable(rxpce_cd_dump src/cd_dump/main.cpp src/cd_dump/windows_drive.cpp)
+    target_link_libraries(rxpce_cd_dump PRIVATE cd_dump_store setupapi uuid)
+    target_compile_definitions(rxpce_cd_dump PRIVATE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+    target_include_directories(rxpce_cd_dump SYSTEM PRIVATE third-party/picojson)
+    rxpce_copy_notices(rxpce_cd_dump)
+endif()
 
 
 # Only this directory's C++ targets; upstream C/C++ targets keep their policy.

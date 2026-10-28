@@ -4,6 +4,8 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 詳しい操作・設定・保存ファイルの説明は[操作説明書](MANUAL.md)を参照してください。
 
+実CDからのCUE＋BIN作成は[CD取り込みツール](CD_DUMP.md)を参照してください。
+
 ソースからのビルドは[ビルド手順](BUILDING.md)、プリギャップ付きCUE＋BINからCHDへの変換準備は[CUE変換補助ツール](CUE_MATERIALIZE.md)を参照してください。
 
 ## 日本語
@@ -24,7 +26,7 @@ rxpceは、かつて公開されていたxpceをWindows 11向けに改修したP
 | 音声 | WASAPI／DirectSound、PSG・CD-DA・ADPCM |
 | 保存 | ゲーム内セーブ用RAM、ステート保存・復帰 |
 
-アーケードカード、スーパーグラフィックス、実CDドライブは対象外です。ROM、BIOS、CDイメージは同梱しません。
+アーケードカード、スーパーグラフィックス、本体からの実CDドライブ再生は対象外です。ROM、BIOS、CDイメージは同梱しません。
 
 ### 動作環境と導入
 
@@ -82,6 +84,8 @@ rxpceは非商用条件でソースを公開します。ACowardが権利を持�
 
 rxpce is a PC Engine emulator adapted from the original xpce for Windows 11. The UI is in English. See the [user manual](MANUAL.md#english) for complete instructions.
 
+See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from physical CDs.
+
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
 | Feature | Support in 1.0.0 |
@@ -94,7 +98,7 @@ See [Building](BUILDING.md#english) for source builds and the [CUE conversion he
 | Audio | WASAPI or DirectSound; PSG, CD-DA and ADPCM |
 | Saving | Game-save RAM and save states |
 
-Arcade Card, SuperGrafx and physical CD drives are not supported. ROMs, BIOS files and CD images are not included.
+Arcade Card, SuperGrafx and direct playback from physical CD drives are not supported by the emulator. ROMs, BIOS files and CD images are not included.
 
 ### Requirements and installation
 
