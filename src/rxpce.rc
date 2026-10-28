@@ -1,0 +1,151 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include <winres.h>
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English resources
+
+#if 1
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(932)
+#endif //_WIN32
+
+
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON    DISCARDABLE     "res\\rxpce.ico"
+
+#ifndef _MAC
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "ACoward\0"
+            VALUE "FileDescription", "rxpce\0"
+            VALUE "FileVersion", "1.0.0\0"
+            VALUE "InternalName", "rxpce\0"
+            VALUE "OriginalFilename", "rxpce.exe\0"
+            VALUE "ProductName", "rxpce\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ACoward\0"
+            VALUE "ProductVersion", "1.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+#endif    // !_MAC
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MENU MENU DISCARDABLE
+BEGIN
+    POPUP "&Game"
+    BEGIN
+        MENUITEM "&Open...", IDC_OPEN
+        MENUITEM SEPARATOR
+        MENUITEM "&Save State\tF5", IDC_SAVE, GRAYED
+        MENUITEM "&Load State\tF6", IDC_LOAD, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "&Reset\tF10", IDC_RESET, GRAYED
+        MENUITEM "S&top Emulation\tEsc", IDC_STOP, GRAYED
+        MENUITEM "E&xit\tAlt+F4", IDC_EXIT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Window Scale\tF8", IDC_ZOOM1
+        MENUITEM "&Fullscreen\tAlt+Enter", IDC_FULLSCREEN
+        MENUITEM SEPARATOR
+        MENUITEM "&Settings...", IDC_SETTINGS
+        MENUITEM SEPARATOR
+        MENUITEM "&About rxpce...", IDC_ABOUT
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// BITMAPFILE
+//
+
+IDR_CHARS_BMP           BITMAPFILE DISCARDABLE  "res\\chars.bmp"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUT DIALOG DISCARDABLE  0, 0, 220, 116
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About rxpce"
+FONT 9, "Segoe UI"
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,11,12,20,20
+    LTEXT           "rxpce 1.0.0",IDC_APPVERSION,43,12,166,12
+    LTEXT           "Copyright (C) 2026 ACoward",IDC_APPCOPYRIGHT,43,31,166,12
+    LTEXT           "xpce: hmmx",IDC_ORIGINALAUTHOR,11,58,198,10
+    LTEXT           "MCS6502: Copyright (c) 2019 Ben Zotto",IDC_CPUCREDIT,11,74,198,10
+    DEFPUSHBUTTON   "OK",IDOK,159,93,50,14
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+
+
+#endif    // English resources
+/////////////////////////////////////////////////////////////////////////////
+
+// Settings use the same English UI language.
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+IDD_SETTINGS DIALOGEX 0,0,420,188
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Settings"
+FONT 9,"Segoe UI"
+BEGIN
+    CONTROL "",2000,"SysTabControl32",WS_TABSTOP,8,8,404,146
+    LTEXT "Changes apply when emulation starts. Scale applies immediately.",-1,12,156,396,10
+    DEFPUSHBUTTON "OK",IDOK,300,170,50,14
+    PUSHBUTTON "Cancel",IDCANCEL,358,170,50,14
+END

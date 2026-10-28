@@ -1,0 +1,57 @@
+fpce / xpce の原許諾文と出典 / Original permission and provenance
+
+原作 fpce: BERO
+Windows 移植版 xpce: hmmx
+
+【原文 / Original statements】
+
+fpce の公開ページ:
+This software is freeware.you can use it non-commercially.
+このソフトはフリーウェアです。非商用なら自由に利用できます。
+
+xpce の公開ページ、および xpce 0.11a バイナリー配布物の xpce.txt:
+このソフトはフリーウェアです。非商用なら自由に利用できます。
+
+【出典 / Sources】
+
+fpce 公開ページ、Wayback Machine の保存日時 1999-11-05 03:55:25:
+https://web.archive.org/web/19991105035525/http://www.geocities.co.jp:80/Playtown/2004/fpce.htm
+
+xpce 公開ページ、Wayback Machine の保存日時 2000-08-15 23:54:27:
+https://web.archive.org/web/20000815235427/http://www.geocities.co.jp:80/SiliconValley/7052/
+
+xpce011a.zip 内の日本語説明書 xpce.txt。説明書内のバージョン表記は 0.11。
+Japanese readme xpce.txt in xpce011a.zip; the readme identifies its version as 0.11.
+
+【確認記録 / Evidence record】
+
+2026-10-28、上記ページのローカル保存版と配布物を確認。
+Local saved pages and distribution archives were examined on 2026-10-28.
+以下は確認に用いたファイルの SHA-256。ページの値は当時のサーバー原本ではなく、
+ローカル保存された HTML ファイルを識別します。資料本体は同梱しません。
+SHA-256 values identify the examined files; HTML hashes identify local saved
+copies, not original server responses. The evidence files are not bundled.
+
+FPCE.htm
+408f115f81daf14902377b0b247d2f7a3cc0272d49c3361d2c8485d213c60df7
+xpce.htm
+341256251cfa5eda835b62a8625eeccbcde1b215d3bcef63bc18eb5891942c0b
+fpce01s.zip
+e8f9abe5dd8d8441d54b5c8ff11ea7ad5ffa095b92251feb7593829ff1385112
+xpce011a.zip
+71f26b36c1549087fa4a87f3773b3eb6a212b3f0b9f27e1bfacd201e171ec233
+xpce011as.zip
+884b9e6e5353c895f4e4fc7339b36ed8dffd3948c6dc269d191baf66e3d49692
+
+【範囲について / Scope notes】
+
+この文書は確認できた許諾文を記録するもので、新しい許諾ではありません。
+原文は改変・改変版の再配布を明示的に列挙していません。
+原作に同梱された第三者のコードには、それぞれの権利表示・条件が適用されます。
+rxpce における適用範囲はルートの LICENSE と THIRD_PARTY_NOTICES.md を参照。
+
+This file records the permission found in the evidence; it grants no new rights.
+The original wording does not explicitly enumerate modification or redistribution
+of modified versions. Third-party code bundled with the original emulator retains
+its own notices and conditions. See LICENSE and THIRD_PARTY_NOTICES.md for scope
+within rxpce.

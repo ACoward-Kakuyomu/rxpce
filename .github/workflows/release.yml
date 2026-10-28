@@ -1,0 +1,50 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Validate release version
+        run: ./tools/package_release.ps1 -Tag $env:RELEASE_TAG -ValidateOnly
+
+      - name: Configure Windows x64
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build Release binaries
+        run: cmake --build build --config Release --target rxpce cue_materialize --parallel 4
+
+      - name: Package binaries and license documents
+        run: ./tools/package_release.ps1 -Tag $env:RELEASE_TAG
+
+      - name: Create GitHub Release and attach packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $archive = "build/packages/rxpce-$env:RELEASE_TAG-windows-x64.zip"
+          gh release create $env:RELEASE_TAG $archive "$archive.sha256" --repo $env:GITHUB_REPOSITORY --verify-tag --title "rxpce $env:RELEASE_TAG" --generate-notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
