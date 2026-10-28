@@ -1,6 +1,6 @@
 # 著作者・第三者ソフトウェア / Third-party notices
 
-[English translation](#english) follows the Japanese text. 全体の適用範囲は [LICENSE](LICENSE) を参照してください。
+[English translation](#english) follows the Japanese text. 全体の適用範囲は [LICENSE.md](LICENSE.md) を参照してください。
 
 ## 日本語
 
@@ -16,7 +16,7 @@
 | `src/Sound.cpp` および旧ソースから引き継いだホスト処理・UI・リソースの部分 | 移植・改修後も原作由来部分には原許諾を適用。新規ファイル名であることだけでは新規著作物と扱わない |
 | `src/res/chars.bmp` | 原作由来の画面内表示用文字画像。原許諾の対象として記録 |
 | `src/res/rxpce.png`、`src/res/rxpce.ico` | rxpce 用に生成AIで作成した画像とその形式変換。由来は [画像資料](src/res/README.md)。ACoward が有する権利に限り PolyForm の対象 |
-| ACoward が権利を持つ追加・改修部分、文書、テスト、ビルド・補助ツール | LICENSE に記載した PolyForm Noncommercial 1.0.0。原作・第三者の権利を含めて再許諾しない |
+| ACoward が権利を持つ追加・改修部分、文書、テスト、ビルド・補助ツール | LICENSE.md に記載した PolyForm Noncommercial 1.0.0。原作・第三者の権利を含めて再許諾しない |
 
 原作アーカイブに含まれる Marat Fayzullin / Alex Krasivsky の旧 m6502 は、現在のビルド・配布ソースには含めません。現在使用する Ben Zotto の MCS6502 とは別の実装です。旧アーカイブや開発履歴の配布を本書によって許可するものではありません。
 
@@ -35,7 +35,7 @@
 
 ## English
 
-See [LICENSE](LICENSE) for the overall scope.
+See [LICENSE.md](LICENSE.md) for the overall scope.
 
 ### fpce / xpce
 

@@ -57,7 +57,7 @@ target_link_libraries(rxpce PRIVATE host_paths machine_core machine_state cartri
 target_link_options(rxpce PRIVATE "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/rxpce.manifest")
 function(rxpce_copy_notices target)
 foreach(document IN ITEMS
-    LICENSE README.md MANUAL.md BUILDING.md CUE_MATERIALIZE.md THIRD_PARTY_NOTICES.md
+    LICENSE.md README.md MANUAL.md BUILDING.md CUE_MATERIALIZE.md THIRD_PARTY_NOTICES.md
     LICENSES/fpce-xpce.txt LICENSES/PolyForm-Noncommercial-1.0.0.txt
     third-party/MCS6502/LICENSE.TXT
     third-party/libchdr/LICENSES.rxpce.txt third-party/libchdr/README.rxpce.md

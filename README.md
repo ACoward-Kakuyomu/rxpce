@@ -35,7 +35,7 @@ rxpceは、かつて公開されていたxpceをWindows 11向けに改修したP
 
 配布ファイルをフォルダーごと展開し、`rxpce.exe`を起動してください。設定と共通のゲーム内セーブを書き込むため、展開先には書込み権限が必要です。`Program Files`などの保護された場所を避け、自分で書き込めるフォルダーを使ってください。
 
-README、操作説明書、`LICENSE`、`LICENSES`、`THIRD_PARTY_NOTICES.md`と`third-party`内のライセンス文書も一緒に保管してください。ROMやBIOSをアプリのフォルダーへ置く必要はありません。
+README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`と`third-party`内のライセンス文書も一緒に保管してください。ROMやBIOSをアプリのフォルダーへ置く必要はありません。
 
 ### 最初のゲームを始める
 
@@ -72,7 +72,7 @@ Copyright (C) 2026 ACoward
 
 Original fpce: BERO / Windows port xpce: hmmx
 
-rxpceは非商用条件でソースを公開します。ACowardが権利を持つ追加・改修部分にはPolyForm Noncommercial 1.0.0、fpce／xpce由来部分には原許諾、外部コードには各ライセンスが適用されます。詳しくは[LICENSE](LICENSE)を参照してください。
+rxpceは非商用条件でソースを公開します。ACowardが権利を持つ追加・改修部分にはPolyForm Noncommercial 1.0.0、fpce／xpce由来部分には原許諾、外部コードには各ライセンスが適用されます。詳しくは[LICENSE.md](LICENSE.md)を参照してください。
 
 依存ライブラリの著作権とライセンスは[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)および同梱のライセンス文書を参照してください。
 
@@ -103,7 +103,7 @@ Arcade Card, SuperGrafx and physical CD drives are not supported. ROMs, BIOS fil
 * Microsoft Visual C++ v14 Redistributable, **x64**. If missing or outdated, install the latest supported package from [Microsoft's official download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170).
 * A keyboard; a gamepad is optional.
 
-Extract the complete distribution into a writable folder and run `rxpce.exe`. Avoid protected locations such as `Program Files`: settings and shared game-save RAM are written beside the executable. Keep the README, manual, `LICENSE`, `LICENSES`, `THIRD_PARTY_NOTICES.md` and the license documents in `third-party` together with the application. Game images and BIOS files may be kept elsewhere.
+Extract the complete distribution into a writable folder and run `rxpce.exe`. Avoid protected locations such as `Program Files`: settings and shared game-save RAM are written beside the executable. Keep the README, manual, `LICENSE.md`, `LICENSES`, `THIRD_PARTY_NOTICES.md` and the license documents in `third-party` together with the application. Game images and BIOS files may be kept elsewhere.
 
 ### Quick start
 
@@ -137,6 +137,6 @@ Copyright (C) 2026 ACoward
 
 Original fpce: BERO / Windows port xpce: hmmx
 
-rxpce makes its source available under noncommercial terms. ACoward-owned additions and modifications use PolyForm Noncommercial 1.0.0; inherited fpce/xpce material retains the original permission, and external code retains its own licenses. See [LICENSE](LICENSE) for scope.
+rxpce makes its source available under noncommercial terms. ACoward-owned additions and modifications use PolyForm Noncommercial 1.0.0; inherited fpce/xpce material retains the original permission, and external code retains its own licenses. See [LICENSE.md](LICENSE.md) for scope.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the accompanying license documents for third-party copyright and license information.

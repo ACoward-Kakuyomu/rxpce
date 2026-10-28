@@ -27,7 +27,7 @@ cmake --build build --config Release --target rxpce cue_materialize --parallel
 
 ### 配布時の資料
 
-実行ファイルと一緒に、出力先にコピーされた README.md、MANUAL.md、BUILDING.md、CUE_MATERIALIZE.md、LICENSE、LICENSES/、THIRD_PARTY_NOTICES.md、および third-party/ 内のライセンス・導入元資料を保持してください。ソース配布では各依存先の権利表示も維持します。変換補助ツールの使い方は [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md) を参照してください。
+実行ファイルと一緒に、出力先にコピーされた README.md、MANUAL.md、BUILDING.md、CUE_MATERIALIZE.md、LICENSE.md、LICENSES/、THIRD_PARTY_NOTICES.md、および third-party/ 内のライセンス・導入元資料を保持してください。ソース配布では各依存先の権利表示も維持します。変換補助ツールの使い方は [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md) を参照してください。
 
 ### GitHub Release の自動作成
 
@@ -77,7 +77,7 @@ See [README](README.md#english) for runtime requirements. ROMs, BIOS files and C
 
 ### Distribution documents
 
-Keep the copied README.md, MANUAL.md, BUILDING.md, CUE_MATERIALIZE.md, LICENSE, LICENSES/, THIRD_PARTY_NOTICES.md and the license/provenance documents under third-party/ with the executables. Source distributions must also retain dependency notices. See [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md#english) for the conversion helper.
+Keep the copied README.md, MANUAL.md, BUILDING.md, CUE_MATERIALIZE.md, LICENSE.md, LICENSES/, THIRD_PARTY_NOTICES.md and the license/provenance documents under third-party/ with the executables. Source distributions must also retain dependency notices. See [CUE_MATERIALIZE.md](CUE_MATERIALIZE.md#english) for the conversion helper.
 
 ### Automated GitHub Releases
 

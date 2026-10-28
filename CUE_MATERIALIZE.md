@@ -37,7 +37,7 @@
 * 通常の処理エラーでは作成途中の出力を削除しますが、強制終了時には残る場合があります。既存フォルダーを再利用せず、新しい出力先を指定してください。
 * 終了コードは `0` が成功、`1` が読込み・書込み等の失敗、`2` が引数の誤りです。エラー内容は標準エラー出力へ表示します。
 
-CUE 版と CHD 版の rxpce ステートは共有しません。変換後は CHD 用のステートを新しく保存してください。ビルド方法は [BUILDING.md](BUILDING.md)、利用条件は [LICENSE](LICENSE) を参照してください。
+CUE 版と CHD 版の rxpce ステートは共有しません。変換後は CHD 用のステートを新しく保存してください。ビルド方法は [BUILDING.md](BUILDING.md)、利用条件は [LICENSE.md](LICENSE.md) を参照してください。
 
 ## English
 
@@ -74,4 +74,4 @@ See the [official MAME chdman documentation](https://docs.mamedev.org/tools/chdm
 * Ordinary failures clean up incomplete output. Forced termination may leave files behind; use a new output folder for another attempt.
 * Exit codes: `0` success, `1` processing failure, `2` incorrect arguments. Errors go to standard error.
 
-rxpce save states are not shared between CUE and CHD versions. Save a new state after conversion. See [BUILDING.md](BUILDING.md#english) for building and [LICENSE](LICENSE) for terms.
+rxpce save states are not shared between CUE and CHD versions. Save a new state after conversion. See [BUILDING.md](BUILDING.md#english) for building and [LICENSE.md](LICENSE.md) for terms.

@@ -48,10 +48,10 @@ xpce011as.zip
 この文書は確認できた許諾文を記録するもので、新しい許諾ではありません。
 原文は改変・改変版の再配布を明示的に列挙していません。
 原作に同梱された第三者のコードには、それぞれの権利表示・条件が適用されます。
-rxpce における適用範囲はルートの LICENSE と THIRD_PARTY_NOTICES.md を参照。
+rxpce における適用範囲はルートの LICENSE.md と THIRD_PARTY_NOTICES.md を参照。
 
 This file records the permission found in the evidence; it grants no new rights.
 The original wording does not explicitly enumerate modification or redistribution
 of modified versions. Third-party code bundled with the original emulator retains
-its own notices and conditions. See LICENSE and THIRD_PARTY_NOTICES.md for scope
+its own notices and conditions. See LICENSE.md and THIRD_PARTY_NOTICES.md for scope
 within rxpce.
