@@ -26,22 +26,70 @@ void CheckFrame(Machine& machine, FrameSurface frame) {
         machine.io.screen_w < 0 || machine.io.screen_w > 512 || machine.io.screen_w % 8)
         throw std::invalid_argument("Invalid video frame or geometry");
 }
+int SpriteWidth(const Sprite& sprite) {
+    return (sprite.atr & 0x100) ? 32 : 16;
+}
+int SpriteHeight(const Sprite& sprite) {
+    constexpr int heights[] = {16, 32, 64, 64};
+    return heights[(sprite.atr >> 12) & 3];
+}
+std::uint32_t ReverseBits(std::uint32_t bits) {
+    bits = ((bits & 0x55555555u) << 1) | ((bits >> 1) & 0x55555555u);
+    bits = ((bits & 0x33333333u) << 2) | ((bits >> 2) & 0x33333333u);
+    bits = ((bits & 0x0f0f0f0fu) << 4) | ((bits >> 4) & 0x0f0f0f0fu);
+    bits = ((bits & 0x00ff00ffu) << 8) | ((bits >> 8) & 0x00ff00ffu);
+    return (bits << 16) | (bits >> 16);
+}
+// Bit zero is the leftmost screen pixel, independent of palette and drawing caches.
+std::uint32_t SpriteRowMask(const Machine& machine, const Sprite& sprite, int row) {
+    const int width = SpriteWidth(sprite), height = SpriteHeight(sprite);
+    int y = row - ((sprite.y & 1023) - 64);
+    if (y < 0 || y >= height)
+        return 0;
+    if (sprite.atr & 0x8000)
+        y = height - 1 - y;
+    const unsigned alignment = (height / 16 - 1) * 2 + (width / 16 - 1);
+    const unsigned base = ((sprite.no & 2047) >> 1) & ~alignment;
+    std::uint32_t mask = 0;
+    for (int cell = 0; cell < width / 16; ++cell) {
+        const auto* tile = machine.graphics.vram() + (base + (y / 16) * 2 + cell) * 128;
+        std::uint16_t opaque = 0;
+        for (unsigned plane = 0; plane < 4; ++plane)
+            opaque |= ReadWord(tile + plane * 32 + (y % 16) * 2);
+        mask |= (ReverseBits(opaque) >> 16) << (cell * 16);
+    }
+    return (sprite.atr & 0x800) ? ReverseBits(mask) >> (32 - width) : mask;
+}
 } // namespace
 bool SpritesCollide(const Machine& machine) {
-    int i, x0, y0, w0, h0, x, y, w, h;
+    const int row = machine.scanline;
+    if (!machine.graphics.vram() || machine.io.screen_w <= 0 || row < machine.io.minline ||
+        row > machine.io.maxline)
+        return false;
     const auto first = ReadSprite(machine, 0);
-    x0 = first.x & 1023;
-    y0 = first.y & 1023;
-    w0 = (((first.atr >> 8) & 1) + 1) * 16;
-    const int heights[] = {16, 32, 64, 64};
-    h0 = heights[(first.atr >> 12) & 3];
-    for (i = 1; i < 64; i++) {
-        const auto spr = ReadSprite(machine, static_cast<unsigned>(i));
-        x = spr.x & 1023;
-        y = spr.y & 1023;
-        w = (((spr.atr >> 8) & 1) + 1) * 16;
-        h = heights[(spr.atr >> 12) & 3];
-        if ((x < x0 + w0) && (x + w > x0) && (y < y0 + h0) && (y + h > y0))
+    const int x0 = (first.x & 1023) - 32, w0 = SpriteWidth(first);
+    if (x0 >= machine.io.screen_w || x0 + w0 <= 0)
+        return false;
+    const auto mask0 = SpriteRowMask(machine, first, row);
+    if (!mask0)
+        return false;
+    int remaining = 16 - w0 / 16;
+    for (unsigned i = 1; i < 64 && remaining; ++i) {
+        const auto spr = ReadSprite(machine, i);
+        const int y = (spr.y & 1023) - 64;
+        if (row < y || row >= y + SpriteHeight(spr))
+            continue;
+        const int cells = std::min(remaining, SpriteWidth(spr) / 16);
+        remaining -=
+            cells; // Y selection consumes cells even when X is offscreen or pixels are zero.
+        const int x = (spr.x & 1023) - 32;
+        const int left = std::max({0, x0, x});
+        const int end = std::min({machine.io.screen_w, x0 + w0, x + cells * 16});
+        if (left >= end)
+            continue;
+        const auto overlap = static_cast<std::uint32_t>((std::uint64_t{1} << (end - left)) - 1);
+        if (((mask0 >> (left - x0)) & (SpriteRowMask(machine, spr, row) >> (left - x)) & overlap) !=
+            0)
             return true;
     }
     return false;

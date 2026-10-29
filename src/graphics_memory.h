@@ -34,6 +34,9 @@ class GraphicsMemory {
     std::uint8_t* vram() noexcept {
         return storage_ ? storage_->vram.data() : nullptr;
     }
+    const std::uint8_t* vram() const noexcept {
+        return storage_ ? storage_->vram.data() : nullptr;
+    }
     CacheWord* background() noexcept {
         return storage_ ? storage_->background.data() : nullptr;
     }

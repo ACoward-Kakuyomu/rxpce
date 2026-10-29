@@ -9,7 +9,7 @@
 
 namespace {
 std::mutex sound_mutex;
-bool initialized = false;
+bool initialized = false, emulating = false;
 rxpce_audio::Mixer mixer;
 rxpce_audio::OutputSettings active_settings;
 HWND output_window = nullptr;
@@ -35,19 +35,22 @@ static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
         output_window = window;
         output_channels = settings.channels;
     }
-    if (!settings.enabled)
-        return true;
     try {
         std::lock_guard<std::mutex> lock(sound_mutex);
         mixer.configure(settings.sample_rate, settings.channels, settings.base_clock_hz, state);
         mixer.set_extra_source(std::move(source));
         mixer.reset(cycles, state);
-        if (phase)
-            mixer.restore_phase(phase->voices, phase->rate);
-        initialized = true;
+        if (phase) {
+            mixer.restore_phase(phase->voices);
+            mixer.restore_clock(phase->rate, phase->base_clock, phase->remainder);
+        }
+        emulating = true;
+        initialized = settings.enabled;
     } catch (const std::exception&) {
         return false;
     }
+    if (!settings.enabled)
+        return true;
     const bool started =
         settings.backend == rxpce_audio::OutputBackend::wasapi
             ? InitWasapi(settings.sample_rate, settings.channels, settings.latency_ms) != FALSE
@@ -67,7 +70,7 @@ bool InitSound(rxpce_audio::OutputSettings settings, HWND window,
 void TrashSound() {
     {
         std::lock_guard<std::mutex> lock(sound_mutex);
-        initialized = false;
+        initialized = emulating = false;
     }
     // Never join the playback thread while holding its audio lock.
     ReleaseDSound();
@@ -84,15 +87,15 @@ void SetSoundExtraSource(std::function<void(float*, std::size_t, unsigned)> sour
 
 void SoundPsgChanged(std::uint32_t cycles, const rxpce_audio::PsgState& state) {
     std::lock_guard<std::mutex> lock(sound_mutex);
-    if (initialized)
+    if (emulating)
         mixer.update(cycles, state);
 }
 
 rxpce_audio::PsgPhaseState CaptureSoundPhase(std::uint32_t cycles) {
     std::lock_guard<std::mutex> lock(sound_mutex);
-    if (initialized)
+    if (emulating)
         mixer.sync(cycles);
-    return {mixer.rate(), mixer.phase_state()};
+    return {mixer.rate(), mixer.phase_state(), mixer.base_clock(), mixer.sample_remainder()};
 }
 
 bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cycles,
@@ -102,9 +105,10 @@ bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cy
     HWND window;
     {
         std::lock_guard<std::mutex> lock(sound_mutex);
-        if (initialized) {
+        if (emulating) {
             mixer.reset(cycles, state);
-            mixer.restore_phase(phase.voices, phase.rate);
+            mixer.restore_phase(phase.voices);
+            mixer.restore_clock(phase.rate, phase.base_clock, phase.remainder);
             return true;
         }
         source = mixer.extra_source();
@@ -116,13 +120,13 @@ bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cy
 
 void SyncSoundCycles(std::uint32_t cycles) {
     std::lock_guard<std::mutex> lock(sound_mutex);
-    if (initialized)
+    if (emulating)
         mixer.sync(cycles);
 }
 
 void ResetSound(std::uint32_t cycles, const rxpce_audio::PsgState& state) {
     std::lock_guard<std::mutex> lock(sound_mutex);
-    if (initialized)
+    if (emulating)
         mixer.reset(cycles, state);
 }
 

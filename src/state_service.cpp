@@ -9,7 +9,6 @@ using rxpce_host::CurrentMachine;
 #include "state_format.h"
 #include "cd_machine_state.h"
 #include "cd_state_file.h"
-#include "graphics_memory.h"
 #include "archive.h"
 #include "nvram.h"
 #include "pce.h"
@@ -18,7 +17,6 @@ using rxpce_host::CurrentMachine;
 #include "log.h"
 #include "settings.h"
 #include "frame_timing.h"
-#include <algorithm>
 #include <fstream>
 #include <utility>
 
@@ -49,39 +47,6 @@ rxpce_state::SnapshotRequirements requirements(bool cd) {
         value.buttons[n] = static_cast<std::uint8_t>(rxpce_config::active_input.players[n].buttons);
     return value;
 }
-std::unique_ptr<rxpce_state::MachineSnapshot>
-capture(const rxpce_state::SnapshotRequirements& binding) {
-    auto& machine = CurrentMachine();
-    auto value = std::make_unique<rxpce_state::MachineSnapshot>();
-    std::copy_n(machine.ram.data(), value->ram.size(), value->ram.begin());
-    std::copy_n(machine.graphics.vram(), value->vram.size(), value->vram.begin());
-    std::copy_n(machine.video.sprites.data(), value->sprites.size(), value->sprites.begin());
-    std::copy_n(machine.video.palette.data(), value->palette.size(), value->palette.begin());
-    value->scanline = machine.scanline;
-    value->io = machine.io;
-    std::copy_n(machine.backup_ram.data(), value->backup.size(), value->backup.begin());
-    value->bank = CartridgeBank();
-    value->cpu = machine.cpu;
-    if (binding.flags & 1)
-        std::copy_n(machine.populous.data(), value->populous.size(), value->populous.begin());
-    return value;
-}
-void apply(const rxpce_state::MachineSnapshot& value,
-           const rxpce_state::SnapshotRequirements& binding) {
-    auto& machine = CurrentMachine();
-    std::copy(value.ram.begin(), value.ram.end(), machine.ram.data());
-    std::copy(value.vram.begin(), value.vram.end(), machine.graphics.vram());
-    std::copy(value.sprites.begin(), value.sprites.end(), machine.video.sprites.data());
-    std::copy(value.palette.begin(), value.palette.end(), machine.video.palette.data());
-    machine.scanline = value.scanline;
-    machine.io = value.io;
-    std::copy(value.backup.begin(), value.backup.end(), machine.backup_ram.data());
-    const auto revision = machine.cpu.revision + 1;
-    machine.cpu = value.cpu;
-    machine.cpu.revision = revision;
-    if (binding.flags & 1)
-        std::copy(value.populous.begin(), value.populous.end(), machine.populous.data());
-}
 } // namespace
 void SaveState() {
     auto& machine = CurrentMachine();
@@ -91,10 +56,12 @@ void SaveState() {
         rxpce_audio::PsgPhaseState sound;
         if (cd) {
             SynchronizeCdState();
-            sound = CaptureSoundPhase(machine.cpu.cycles());
         }
-        const auto snapshot = capture(binding);
-        auto payload = rxpce_state::encode_machine(*snapshot, binding);
+        sound = CaptureSoundPhase(machine.cpu.cycles());
+        const auto snapshot = rxpce_state::capture_machine(machine, binding.flags);
+        snapshot->sound = sound;
+        auto payload = cd ? rxpce_state::encode_machine(*snapshot, binding)
+                          : rxpce_state::encode_hucard(*snapshot, binding);
         if (cd)
             AppendCdState(payload, sound);
         auto file = rxpce_state::header(payload.size(), binding.flags);
@@ -122,24 +89,17 @@ void LoadState() {
     try {
         const auto binding = requirements(cd);
         const auto base = rxpce_state::machine_state_bytes(binding.flags);
-        const auto total = base + (cd ? CdStateBytes() : 0);
+        const auto total =
+            cd ? base + CdStateBytes() : rxpce_state::hucard_state_bytes(binding.flags);
         std::vector<char> payload;
         if (cd) {
-            std::vector<char> file;
             std::string error;
-            if (!rxpce_cd::read_state_file(CdStatePath(rxpce_host::runtime.state_directory),
-                                           16 + total, file, error)) {
+            if (!rxpce_cd::read_state_payload(CdStatePath(rxpce_host::runtime.state_directory),
+                                              total, binding.flags, payload, error)) {
                 LogDumpDetail("CD state rejected: %s\n", error.c_str());
                 SetInfoString("Invalid or unreadable CD state file");
                 return;
             }
-            const auto expected = rxpce_state::header(total, binding.flags);
-            if (!std::equal(expected.begin(), expected.end(), file.begin())) {
-                LogDumpDetail("CD state rejected: header mismatch\n");
-                SetInfoString("CD state format or configuration mismatch");
-                return;
-            }
-            payload.assign(file.begin() + 16, file.end());
         } else {
             std::ifstream input(StateFilePath(), std::ios::binary);
             if (!rxpce_state::read(input, total, binding.flags, payload)) {
@@ -150,7 +110,10 @@ void LoadState() {
         }
         std::unique_ptr<rxpce_state::MachineSnapshot> snapshot;
         std::string error;
-        if (!rxpce_state::decode_machine(payload.data(), base, binding, snapshot, error)) {
+        const bool decoded =
+            cd ? rxpce_state::decode_machine(payload.data(), base, binding, snapshot, error)
+               : rxpce_state::decode_hucard(payload.data(), total, binding, snapshot, error);
+        if (!decoded) {
             LogDumpDetail("State rejected: %s\n", error.c_str());
             SetInfoString("Invalid state; see rxpce.log");
             return;
@@ -171,22 +134,13 @@ void LoadState() {
                 return;
             }
         }
-        apply(*snapshot, binding);
+        rxpce_state::apply_machine(machine, *snapshot, binding.flags, rxpce_host::HostFrame());
         if (saved_cd)
             ApplyCdState(std::move(*saved_cd));
         RestoreCartridgeBank(snapshot->bank);
-        std::fill_n(machine.graphics.background_dirty(),
-                    rxpce_machine::GraphicsMemory::background_tiles, 1);
-        std::fill_n(machine.graphics.sprite_dirty(), rxpce_machine::GraphicsMemory::sprite_tiles,
-                    1);
-        const auto frame = rxpce_host::HostFrame();
-        std::fill_n(frame.pixels, frame.count, machine.video.palette[0]);
-        bool sound_ok = true;
-        if (saved_cd)
-            sound_ok = RestoreSoundPhase(saved_cd->sound, machine.cpu.cycles(),
-                                         rxpce_audio::snapshot_psg(machine.io));
-        else
-            ResetSound(machine.cpu.cycles(), rxpce_audio::snapshot_psg(machine.io));
+        const auto& sound = saved_cd ? saved_cd->sound : snapshot->sound;
+        const bool sound_ok =
+            RestoreSoundPhase(sound, machine.cpu.cycles(), rxpce_audio::snapshot_psg(machine.io));
         ResetFrameTiming();
         LogDumpDetail("State loaded successfully\n");
         SetInfoString(sound_ok ? "State loaded" : "State loaded; audio restart failed");

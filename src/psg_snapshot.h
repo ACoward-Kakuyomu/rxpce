@@ -4,6 +4,12 @@
 
 namespace rxpce_audio {
 inline PsgState snapshot_psg(const rxpce_machine::IoState& io) {
-    return {io.psg_volume, io.psg, io.wave};
+    PsgState state;
+    state.volume = io.psg_volume;
+    state.registers = io.psg;
+    state.wave = io.wave;
+    state.lfo_frequency = io.psg_lfo_freq;
+    state.lfo_control = io.psg_lfo_ctrl;
+    return state;
 }
 } // namespace rxpce_audio

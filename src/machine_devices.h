@@ -14,13 +14,13 @@ struct DeviceHost {
     void (*trace)(void*, const char*, std::va_list) = nullptr;
     void (*sync_audio)(void*, std::uint32_t) = nullptr;
     bool (*begin_frame)(void*) = nullptr;
-    bool (*poll_commands)(void*) = nullptr;
     void (*present)(void*, FrameSurface, DisplayRectangle) = nullptr;
     FrameSurface (*frame)(void*) = nullptr;
 };
 void WriteMachineIo(Machine&, const DeviceHost&, std::uint16_t address, std::uint8_t value);
 std::uint8_t ReadMachineIo(Machine&, const DeviceHost&, std::uint16_t address);
-bool TickMachineLine(Machine&, const DeviceHost&, FrameSurface);
+void TickMachineLine(Machine&, const DeviceHost&, FrameSurface, std::uint64_t time);
 void TickMachineTimer(Machine&);
+void ResetVideoAfterLoad(Machine&, FrameSurface);
 DisplayRectangle VisibleRectangle(const Machine&);
 } // namespace rxpce_machine

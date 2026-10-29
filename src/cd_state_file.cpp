@@ -1,5 +1,7 @@
 #define NOMINMAX
 #include "cd_state_file.h"
+#include "state_format.h"
+#include <algorithm>
 #include "nvram.h"
 #include <windows.h>
 #include "unique_handle.h"
@@ -80,6 +82,24 @@ bool read_state_file(const std::wstring& path, std::size_t size, std::vector<cha
     }
     output.swap(next);
     error.clear();
+    return true;
+}
+bool read_state_payload(const std::wstring& path, std::size_t payload_size, std::uint32_t flags,
+                        std::vector<char>& output, std::string& error) {
+    if (payload_size > 2 * 1024 * 1024 - rxpce_state::header_size) {
+        error = "Invalid CD state size";
+        return false;
+    }
+    const auto expected = rxpce_state::header(payload_size, flags);
+    std::vector<char> file;
+    if (!read_state_file(path, expected.size() + payload_size, file, error))
+        return false;
+    if (!std::equal(expected.begin(), expected.end(), file.begin())) {
+        error = "CD state header mismatch";
+        return false;
+    }
+    std::vector<char> next(file.begin() + expected.size(), file.end());
+    output.swap(next);
     return true;
 }
 bool write_state_file(const std::wstring& path, const std::vector<char>& data, std::string& error) {

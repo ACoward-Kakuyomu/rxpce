@@ -135,4 +135,29 @@ bool decode_machine(const char* data, std::size_t size, const SnapshotRequiremen
         return false;
     }
 }
+std::vector<char> encode_hucard(const MachineSnapshot& value, const SnapshotRequirements& req) {
+    if (!rxpce_audio::valid_phase(value.sound))
+        throw std::invalid_argument("invalid PSG phase state");
+    auto bytes = encode_machine(value, req);
+    const auto phase = rxpce_audio::encode_phase(value.sound);
+    bytes.insert(bytes.end(), phase.begin(), phase.end());
+    return bytes;
+}
+bool decode_hucard(const char* data, std::size_t size, const SnapshotRequirements& req,
+                   std::unique_ptr<MachineSnapshot>& output, std::string& error) {
+    if (!data || size != hucard_state_bytes(req.flags)) {
+        error = "invalid HuCard state length";
+        return false;
+    }
+    std::unique_ptr<MachineSnapshot> next;
+    const auto base = machine_state_bytes(req.flags);
+    if (!decode_machine(data, base, req, next, error))
+        return false;
+    if (!rxpce_audio::decode_phase(data + base, size - base, next->sound)) {
+        error = "invalid PSG phase state";
+        return false;
+    }
+    output = std::move(next);
+    return true;
+}
 } // namespace rxpce_state

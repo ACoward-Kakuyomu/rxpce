@@ -8,6 +8,12 @@ extern "C" {
 namespace rxpce_cpu {
 enum Flag : std::uint8_t { C = 1, Z = 2, I = 4, D = 8, B = 16, T = 32, V = 64, N = 128 };
 enum Irq : std::uint8_t { Irq2 = 1, Irq1 = 2, Timer = 4 };
+struct TransferState {
+    std::uint8_t opcode = 0; // Zero means inactive; remaining==0 means finish is pending.
+    std::uint16_t source = 0, destination = 0;
+    std::uint32_t remaining = 0;
+    bool alternate = false;
+};
 // Only this pointer-free state is eligible for a future save-state format.
 struct State {
     std::uint16_t pc = 0;
@@ -17,6 +23,7 @@ struct State {
     bool irq_sampled_before_sei = false;
     bool nmi_line = false, nmi_pending = false, low_speed = true;
     std::uint64_t elapsed = 0;
+    TransferState transfer;
 };
 struct Bus {
     std::uint8_t (*read)(std::uint32_t physical, void* context);
@@ -30,6 +37,7 @@ struct StepResult {
     unsigned elapsed; // high-speed clock units (low speed multiplies by 4)
     bool valid;
     bool interrupt;
+    bool instruction_complete = true;
 };
 class HuC6280 {
   public:
@@ -70,7 +78,9 @@ class HuC6280 {
     unsigned enter_interrupt(std::uint16_t, bool software);
     unsigned execute(std::uint8_t opcode, bool& valid);
     unsigned alu(std::uint8_t opcode);
+    unsigned rmw(std::uint8_t opcode);
     unsigned transfer(std::uint8_t opcode);
+    unsigned continue_transfer();
     bool delegate(std::uint8_t opcode, int operand = -1);
     void initialize_base();
 };

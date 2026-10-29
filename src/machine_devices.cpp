@@ -66,6 +66,20 @@ void PresentScreen(Machine& machine, const DeviceHost& host, FrameSurface frame)
         host.present(host.context, frame, VisibleRectangle(machine));
 }
 } // namespace
+void ResetVideoAfterLoad(Machine& machine, FrameSurface frame) {
+    auto& v = machine.video;
+    v.render_frame = false;
+    v.previous_line = 0;
+    v.scroll_changed = v.scroll_y_difference = v.old_scroll_y_difference = 0;
+    v.old_scroll_x = v.old_scroll_y = 0;
+    v.uses_sprite_priority = 0;
+    v.priority.fill(0);
+    machine.frame_boundary_pending = false;
+    std::fill_n(machine.graphics.background_dirty(), GraphicsMemory::background_tiles, 1);
+    std::fill_n(machine.graphics.sprite_dirty(), GraphicsMemory::sprite_tiles, 1);
+    if (frame.pixels)
+        std::fill_n(frame.pixels, frame.count, v.palette[0]);
+}
 DisplayRectangle VisibleRectangle(const Machine& machine) {
     const int first =
         machine.io.maxline - machine.io.minline > MAXDISP
@@ -500,10 +514,10 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
     return NODATA;
 }
 
-bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface frame) {
-    auto* R = &machine.cpu;
+void TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface frame,
+                     std::uint64_t time) {
     if (host.sync_audio)
-        host.sync_audio(host.context, R->cycles());
+        host.sync_audio(host.context, static_cast<std::uint32_t>(time));
     int dispmin, dispmax;
     int ret;
 
@@ -534,16 +548,16 @@ bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
         machine.video.old_scroll_y_difference = 0;
 
     } else if (machine.scanline == machine.io.maxline) {
-        if ((machine.io.vdc[CR].value & 0x01) && rxpce_machine::SpritesCollide(machine)) {
-            machine.io.vdc_status |= VDC_SpHit;
-            ret = PceIrq;
-        }
         if (machine.video.render_frame) {
             FlushVideoRows(machine, frame, dispmax + 1);
             PresentScreen(machine, host, frame);
         }
     }
     if (machine.scanline >= machine.io.minline && machine.scanline <= machine.io.maxline) {
+        if ((machine.io.vdc[CR].value & 0x01) && rxpce_machine::SpritesCollide(machine)) {
+            machine.io.vdc_status |= VDC_SpHit;
+            ret = PceIrq;
+        }
         if (machine.scanline == (machine.io.vdc[RCR].value & 1023) - 64) {
             if ((machine.io.vdc[CR].value & 0x04) && machine.video.render_frame &&
                 dispmin <= machine.scanline && machine.scanline <= dispmax) {
@@ -569,12 +583,7 @@ bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
     machine.video.scroll_changed = 0;
     if (machine.scanline == machine.io.maxline + 1) {
 
-        const auto revision = R->revision;
-        const bool running = !host.poll_commands || host.poll_commands(host.context);
-        if (!running)
-            return false;
-        if (revision != R->revision)
-            return true;
+        machine.frame_boundary_pending = true;
 
         /* machine.graphics.vram() to SATB DMA */
         if (machine.io.vdc_satb == 1 || machine.io.vdc[DCR].value & 0x0010) {
@@ -611,7 +620,6 @@ bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
     }
     if (ret == PceIrq)
         machine.io.irq_status |= IRQ1;
-    return true;
 }
 
 void TickMachineTimer(Machine& machine) {

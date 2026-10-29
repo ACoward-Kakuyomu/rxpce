@@ -12,5 +12,6 @@ struct FrameSurface {
 void RenderBackground(Machine&, FrameSurface, int first, int last);
 void RenderSprites(Machine&, FrameSurface, int first, int end, unsigned priority);
 void ClearVideoRows(Machine&, FrameSurface, int first, int last);
+// Evaluate opaque sprite-zero overlap on Machine::scanline in the VDC display area.
 bool SpritesCollide(const Machine&);
 } // namespace rxpce_machine

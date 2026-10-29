@@ -12,5 +12,8 @@ bool read_binding(rxpce_state::Reader& input, const StateBinding& expected, std:
 std::wstring state_path(const std::wstring& image, const std::wstring& folder);
 bool read_state_file(const std::wstring& path, std::size_t size, std::vector<char>& output,
                      std::string& error);
+// Read and validate the outer GUID header, returning only the payload.
+bool read_state_payload(const std::wstring& path, std::size_t payload_size, std::uint32_t flags,
+                        std::vector<char>& output, std::string& error);
 bool write_state_file(const std::wstring& path, const std::vector<char>& data, std::string& error);
 } // namespace rxpce_cd

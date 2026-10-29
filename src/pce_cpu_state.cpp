@@ -29,10 +29,15 @@ std::vector<char> encode_cpu(const PceCpu& value) {
     put(std::uint32_t(value.timer_remaining), 4);
     put(value.Trace ? 1 : 0, 1);
     put(value.Trap, 2);
+    put(s.transfer.opcode, 1);
+    put(s.transfer.source, 2);
+    put(s.transfer.destination, 2);
+    put(s.transfer.remaining, 4);
+    put(s.transfer.alternate ? 1 : 0, 1);
     return data;
 }
 bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu& result) {
-    if (size != cpu_state_size || line <= 0 || timer <= 0)
+    if (!data || size != cpu_state_size || line <= 0 || timer <= 0)
         return false;
     PceCpu value;
     unsigned offset = 0;
@@ -75,9 +80,33 @@ bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu&
     const auto trace = get(1);
     value.Trace = trace != 0;
     value.Trap = word(get(2));
+    auto& t = s.transfer;
+    t.opcode = byte(get(1));
+    t.source = word(get(2));
+    t.destination = word(get(2));
+    t.remaining = std::uint32_t(get(4));
+    const auto alternate = get(1);
+    t.alternate = alternate != 0;
+    const bool alternating = t.opcode == 0xe3 || t.opcode == 0xf3;
+    if (alternate > 1 || t.remaining > 65536 || (!alternating && t.alternate))
+        return false;
+    switch (t.opcode) {
+    case 0:
+        if (t.source || t.destination || t.remaining || t.alternate)
+            return false;
+        break;
+    case 0x73:
+    case 0xc3:
+    case 0xd3:
+    case 0xe3:
+    case 0xf3:
+        break;
+    default:
+        return false;
+    }
     if (trace > 1 || value.line_period != line || value.timer_period != timer ||
-        value.line_remaining > line || value.line_remaining < -4194304 ||
-        value.timer_remaining <= 0 || value.timer_remaining > timer)
+        value.line_remaining <= 0 || value.line_remaining > line || value.timer_remaining <= 0 ||
+        value.timer_remaining > timer)
         return false;
     result = value;
     return true;

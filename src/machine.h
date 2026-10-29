@@ -51,6 +51,7 @@ class Machine {
     IoState io;
     PceCpu cpu;
     int line_period = 1, timer_period = 1, frame_lines = 263, scanline = 0;
+    bool frame_boundary_pending = false; // Runtime-only request, consumed at a CPU safe point.
     std::unique_ptr<rxpce_cd::Session> cd_session;
     rxpce_cd::Controller cd_controller;
     std::filesystem::path source, ram_path;

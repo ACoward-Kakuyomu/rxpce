@@ -117,6 +117,13 @@ unsigned HuC6280::enter_interrupt(std::uint16_t vector, bool software) {
 StepResult HuC6280::step() {
     waits_ = 0;
     const unsigned divisor = state_.low_speed ? 4 : 1;
+    if (state_.transfer.opcode) {
+        unsigned cycles = continue_transfer();
+        cycles += waits_;
+        const unsigned elapsed = cycles * divisor;
+        state_.elapsed += elapsed;
+        return {cycles, elapsed, true, false, state_.transfer.opcode == 0};
+    }
     unsigned cycles = 0;
     bool interrupt = false, valid = true;
     const bool irq_enabled = !(state_.p & I) || state_.irq_sampled_before_sei;
@@ -142,7 +149,7 @@ StepResult HuC6280::step() {
     cycles += waits_;
     const unsigned elapsed = cycles * divisor;
     state_.elapsed += elapsed;
-    return {cycles, elapsed, valid, interrupt};
+    return {cycles, elapsed, valid, interrupt, state_.transfer.opcode == 0};
 }
 
 // Group-1 ALU modes, plus 65C02 ($zp). Decode the operand before redirecting
@@ -248,34 +255,94 @@ unsigned HuC6280::alu(std::uint8_t op) {
 
 unsigned HuC6280::transfer(std::uint8_t op) {
     auto& s = state_;
-    // Read all operands before writes; transfers can overwrite their program.
-    auto source = word(std::uint16_t(s.pc + 1));
-    auto dest = word(std::uint16_t(s.pc + 3));
+    // Decode everything before writes, including transfers over their own operands.
+    const auto source = word(std::uint16_t(s.pc + 1));
+    const auto dest = word(std::uint16_t(s.pc + 3));
     const auto count = word(std::uint16_t(s.pc + 5));
-    const unsigned length = count ? count : 65536;
     s.pc = std::uint16_t(s.pc + 7);
     push(s.y);
     push(s.a);
     push(s.x);
-    for (unsigned n = 0; n < length; ++n) {
-        const auto from = std::uint16_t(source + ((op == 0xf3) ? n % 2 : 0));
-        const auto to = std::uint16_t(dest + ((op == 0xe3) ? n % 2 : 0));
-        const auto value = read(from);
-        write(to, value);
-        if (op == 0xc3) {
-            --source;
-            --dest;
-        } else {
-            if (op != 0xf3)
-                ++source;
-            if (op == 0x73 || op == 0xf3)
-                ++dest;
-        }
+    s.transfer = {op, source, dest, count ? unsigned(count) : 65536u, false};
+    // Approximate access placement: setup 14, each byte 6, finish 3 clocks.
+    return 14;
+}
+unsigned HuC6280::continue_transfer() {
+    auto& t = state_.transfer;
+    if (!t.remaining) {
+        // Read the actual stack: the transfer may have overwritten it.
+        state_.x = pull();
+        state_.a = pull();
+        state_.y = pull();
+        t = {};
+        return 3;
     }
-    s.x = pull();
-    s.a = pull();
-    s.y = pull();
-    return 17 + 6 * length;
+    const auto from = std::uint16_t(t.source + (t.opcode == 0xf3 && t.alternate ? 1 : 0));
+    const auto to = std::uint16_t(t.destination + (t.opcode == 0xe3 && t.alternate ? 1 : 0));
+    const auto value = read(from);
+    write(to, value);
+    if (t.opcode == 0xc3) {
+        --t.source;
+        --t.destination;
+    } else {
+        if (t.opcode != 0xf3)
+            ++t.source;
+        if (t.opcode == 0x73 || t.opcode == 0xf3)
+            ++t.destination;
+    }
+    --t.remaining;
+    if (t.opcode == 0xe3 || t.opcode == 0xf3)
+        t.alternate = !t.alternate;
+    return 6;
+}
+
+// Keep the decoded address local to this instruction. Data reads must still reach
+// the bus when they alias opcode/operand addresses or another MPR's physical bank.
+unsigned HuC6280::rmw(std::uint8_t op) {
+    auto& s = state_;
+    const auto pc = s.pc;
+    const unsigned mode = op & 31;
+    const bool absolute = mode == 14 || mode == 30;
+    std::uint16_t address;
+    if (absolute) {
+        address = word(std::uint16_t(pc + 1));
+        if (mode == 30)
+            address = std::uint16_t(address + s.x);
+    } else {
+        const auto offset = read(std::uint16_t(pc + 1));
+        address = std::uint16_t(0x2000 + std::uint8_t(offset + (mode == 22 ? s.x : 0)));
+    }
+    const auto input = read(address);
+    const unsigned carry = s.p & C;
+    std::uint8_t value = input;
+    switch (op >> 5) {
+    case 0: // ASL
+        value = std::uint8_t(input << 1);
+        s.p = std::uint8_t((s.p & ~C) | (input >> 7));
+        break;
+    case 1: // ROL
+        value = std::uint8_t((input << 1) | carry);
+        s.p = std::uint8_t((s.p & ~C) | (input >> 7));
+        break;
+    case 2: // LSR
+        value = std::uint8_t(input >> 1);
+        s.p = std::uint8_t((s.p & ~C) | (input & 1));
+        break;
+    case 3: // ROR
+        value = std::uint8_t((input >> 1) | (carry << 7));
+        s.p = std::uint8_t((s.p & ~C) | (input & 1));
+        break;
+    case 6: // DEC
+        --value;
+        break;
+    case 7: // INC
+        ++value;
+        break;
+    }
+    nz(value);
+    write(address, value);
+    s.pc = std::uint16_t(pc + (absolute ? 3 : 2));
+    return absolute ? 7 : 6;
 }
 
 unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
@@ -287,6 +354,9 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
         return alu(op);
     const auto old_p = s.p;
     s.p &= ~T;
+    const unsigned family = op & 0xe0;
+    if ((family <= 0x60 || family >= 0xc0) && (mode == 6 || mode == 22 || mode == 14 || mode == 30))
+        return rmw(op);
     if ((op & 15) == 7) {
         const auto address = std::uint16_t(0x2000 + read(std::uint16_t(pc + 1)));
         const auto value = read(address);
@@ -505,11 +575,6 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
         return 7;
     if (op == 0x4c)
         return 4;
-    const unsigned family = op & 0xe0;
-    if ((family <= 0x60 || family >= 0xc0) && ((op & 31) == 6 || (op & 31) == 22))
-        return 6;
-    if ((family <= 0x60 || family >= 0xc0) && ((op & 31) == 14 || (op & 31) == 30))
-        return 7;
     switch (op) {
     case 0xc0:
         return 2; // CPY immediate: upstream 6502 table has an extra cycle.

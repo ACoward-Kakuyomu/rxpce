@@ -77,9 +77,6 @@ rxpce_machine::DeviceHost& NativeDevices() {
             return BeginVideoFrame(rxpce_host::runtime.frame_skip,
                                    rxpce_host::runtime.auto_frame_skip.load());
         };
-        value.poll_commands = [](void* context) {
-            return rxpce_host::PollHostCommands(*static_cast<Machine*>(context));
-        };
         value.present = [](void*, rxpce_machine::FrameSurface frame,
                            rxpce_machine::DisplayRectangle area) {
             rxpce_host::PresentFrame(frame, area);
@@ -287,7 +284,7 @@ void ResetPCE(PceCpu* state) {
     machine.io.controllers.configure(rxpce_config::active_input.count, modes);
     machine.input_read_log = 0;
     std::fill_n(machine.video.palette.data(), 512, 0);
-    machine.video.render_frame = true;
+    rxpce_machine::ResetVideoAfterLoad(machine, rxpce_host::HostFrame());
     ResetFrameTiming();
     machine.scanline = 0;
     machine.io.vdc_status = 0;
@@ -370,9 +367,9 @@ static int RunPCE(void) {
     PceCpuHost host{
         machine.bus(),
         [](void*) { return IsMachineStopRequested(); },
-        [](PceCpu&, void* context) {
-            return rxpce_machine::TickMachineLine(*static_cast<Machine*>(context), NativeDevices(),
-                                                  HostFrame());
+        [](PceCpu& cpu, void* context) {
+            rxpce_machine::TickMachineLine(*static_cast<Machine*>(context), NativeDevices(),
+                                           HostFrame(), cpu.device_time);
         },
         [](PceCpu&, void* context) {
             rxpce_machine::TickMachineTimer(*static_cast<Machine*>(context));
@@ -390,10 +387,18 @@ static int RunPCE(void) {
     host.clock = [](PceCpu& cpu, void* context) {
         auto& machine = *static_cast<Machine*>(context);
         if (machine.cd_session) {
-            machine.cd_controller.advance(cpu.cpu.elapsed);
+            machine.cd_controller.advance(cpu.device_time);
             machine.io.irq_status =
                 (machine.io.irq_status & ~IRQ2) | (machine.cd_controller.irq() ? IRQ2 : 0);
         }
+    };
+    machine.frame_boundary_pending = false;
+    host.safe_point = [](PceCpu&, void* context) {
+        auto& machine = *static_cast<Machine*>(context);
+        if (!machine.frame_boundary_pending)
+            return !IsMachineStopRequested();
+        machine.frame_boundary_pending = false;
+        return rxpce_host::PollHostCommands(machine);
     };
     LogDumpDetail("CPU core=MCS6502+HuC6280\n");
     if (RunPceCpu(machine.cpu, host) == PceCpuResult::invalid_instruction) {

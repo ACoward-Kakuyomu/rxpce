@@ -5,24 +5,33 @@ namespace rxpce_audio {
 struct PsgPhaseState {
     unsigned rate = 44100;
     PsgSynth::State voices{};
+    unsigned base_clock = 7170000;
+    std::uint32_t remainder = 0;
 };
-constexpr std::size_t phase_state_bytes = 4 + 6 * 20;
+constexpr std::size_t phase_state_bytes = 12 + 6 * 16;
 inline bool valid_phase(const PsgPhaseState& state) {
-    if (state.rate < 1000 || state.rate > 192000)
+    if (state.rate < 1000 || state.rate > 192000 || !state.base_clock ||
+        state.remainder >= state.base_clock)
         return false;
-    for (const auto& voice : state.voices)
-        if (voice.index >= 32 || voice.noise > 1 || voice.phase >= 10ull * state.rate)
+    for (unsigned ch = 0; ch < 6; ++ch) {
+        const auto& voice = state.voices[ch];
+        if (voice.index >= 32 || !voice.seed || voice.seed > 0x3ffff ||
+            voice.tone_remaining > (ch == 1 ? 2097152u : 8192u) ||
+            voice.noise_remaining > (ch >= 4 ? 3968u : 0u))
             return false;
+    }
     return true;
 }
 inline std::vector<char> encode_phase(const PsgPhaseState& state) {
     rxpce_state::Writer w;
     w.number(state.rate, 4);
+    w.number(state.base_clock, 4);
+    w.number(state.remainder, 4);
     for (const auto& voice : state.voices) {
         w.number(voice.index, 4);
-        w.number(voice.noise, 4);
         w.number(voice.seed, 4);
-        w.number(voice.phase, 8);
+        w.number(voice.tone_remaining, 4);
+        w.number(voice.noise_remaining, 4);
     }
     return std::move(w.data);
 }
@@ -32,11 +41,13 @@ inline bool decode_phase(const char* data, std::size_t size, PsgPhaseState& outp
     rxpce_state::Reader r(data, size);
     PsgPhaseState next;
     next.rate = static_cast<unsigned>(r.number(4));
+    next.base_clock = static_cast<unsigned>(r.number(4));
+    next.remainder = static_cast<std::uint32_t>(r.number(4));
     for (auto& voice : next.voices) {
         voice.index = static_cast<std::uint32_t>(r.number(4));
-        voice.noise = static_cast<std::uint32_t>(r.number(4));
         voice.seed = static_cast<std::uint32_t>(r.number(4));
-        voice.phase = r.number(8);
+        voice.tone_remaining = static_cast<std::uint32_t>(r.number(4));
+        voice.noise_remaining = static_cast<std::uint32_t>(r.number(4));
     }
     if (!valid_phase(next))
         return false;

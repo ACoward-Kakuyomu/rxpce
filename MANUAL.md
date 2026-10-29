@@ -188,7 +188,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-PSGのDDAラッチ分離に伴い、ステート形式をHuCard `RXPCE010`／CD `RXPCE011`へ更新しています。以前のステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
+転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。LFO・ノイズの内部カウンター保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
 更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
 
@@ -400,7 +400,7 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-Separating the PSG DDA latch changes save states to HuCard `RXPCE010` / CD `RXPCE011`. Earlier states cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
+Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store LFO and noise counters. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 
 Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
 
