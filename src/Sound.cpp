@@ -17,8 +17,10 @@ unsigned output_channels = 2;
 
 } // namespace
 
-bool InitSound(rxpce_audio::OutputSettings settings, HWND window,
-               const rxpce_audio::PsgState& state) {
+static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
+                            const rxpce_audio::PsgState& state, std::uint32_t cycles,
+                            const rxpce_audio::PsgPhaseState* phase,
+                            std::function<void(float*, std::size_t, unsigned)> source) {
     TrashSound();
     if ((settings.channels != 1 && settings.channels != 2) || !settings.sample_rate ||
         settings.sample_rate > 192000 || !settings.base_clock_hz || !settings.latency_ms ||
@@ -38,6 +40,10 @@ bool InitSound(rxpce_audio::OutputSettings settings, HWND window,
     try {
         std::lock_guard<std::mutex> lock(sound_mutex);
         mixer.configure(settings.sample_rate, settings.channels, settings.base_clock_hz, state);
+        mixer.set_extra_source(std::move(source));
+        mixer.reset(cycles, state);
+        if (phase)
+            mixer.restore_phase(phase->voices, phase->rate);
         initialized = true;
     } catch (const std::exception&) {
         return false;
@@ -51,6 +57,11 @@ bool InitSound(rxpce_audio::OutputSettings settings, HWND window,
         return false;
     }
     return true;
+}
+
+bool InitSound(rxpce_audio::OutputSettings settings, HWND window,
+               const rxpce_audio::PsgState& state) {
+    return InitializeSound(settings, window, state, 0, nullptr, {});
 }
 
 void TrashSound() {
@@ -91,16 +102,16 @@ bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cy
     HWND window;
     {
         std::lock_guard<std::mutex> lock(sound_mutex);
+        if (initialized) {
+            mixer.reset(cycles, state);
+            mixer.restore_phase(phase.voices, phase.rate);
+            return true;
+        }
         source = mixer.extra_source();
         settings = active_settings;
         window = output_window;
     }
-    const bool ok = InitSound(settings, window, state);
-    std::lock_guard<std::mutex> lock(sound_mutex);
-    mixer.set_extra_source(std::move(source));
-    mixer.reset(cycles, state);
-    mixer.restore_phase(phase.voices, phase.rate);
-    return ok;
+    return InitializeSound(settings, window, state, cycles, &phase, std::move(source));
 }
 
 void SyncSoundCycles(std::uint32_t cycles) {

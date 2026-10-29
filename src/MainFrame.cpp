@@ -93,8 +93,17 @@ LRESULT CMainFrame::OnVideoInitialize(UINT, WPARAM, LPARAM, BOOL&) {
 }
 unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
     std::unique_ptr<WorkerStart> start(static_cast<WorkerStart*>(parameter));
+    struct Apartment {
+        HRESULT status = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        ~Apartment() {
+            if (SUCCEEDED(status))
+                CoUninitialize();
+        }
+    } apartment;
     int result = -1;
     try {
+        if (FAILED(apartment.status))
+            throw std::runtime_error("Cannot initialize emulation thread COM apartment");
         result = rxpce_host::RunEmulation(rxpce_paths::executable().parent_path() / L"backup.dat");
     } catch (const std::exception& error) {
         LogDump("Emulation start failed: %s\n", error.what());
@@ -239,6 +248,7 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path) {
     }
     std::unique_ptr<rxpce_cd::Session> session;
     std::string error;
+    StopEmulation();
     m_preparing = true;
     m_cancelPrepare = false;
     bool ready = false;
@@ -389,7 +399,7 @@ LRESULT CMainFrame::OnVideoDpiChanged(UINT, WPARAM, LPARAM position, BOOL&) {
     return 0;
 }
 BOOL CMainFrame::PreTranslateMessage(MSG* message) {
-    if (rxpce_config::dialog_open)
+    if (rxpce_config::dialog_open || m_preparing || m_stopping)
         return FALSE;
     auto& keyboard = rxpce_input::keyboard_state();
     keyboard.event(message->message, static_cast<unsigned>(message->wParam), message->lParam);

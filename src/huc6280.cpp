@@ -511,6 +511,8 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
     if ((family <= 0x60 || family >= 0xc0) && ((op & 31) == 14 || (op & 31) == 30))
         return 7;
     switch (op) {
+    case 0xc0:
+        return 2; // CPY immediate: upstream 6502 table has an extra cycle.
     case 0x24:
     case 0x84:
     case 0x94:

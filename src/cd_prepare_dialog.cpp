@@ -47,6 +47,8 @@ bool PrepareCdWithProgress(HWND owner, const std::wstring& image, const std::wst
     const bool owner_was_enabled = IsWindowEnabled(owner) != FALSE;
     dialog->StartProgressDialog(owner, nullptr, PROGDLG_MODAL | PROGDLG_NOTIME | PROGDLG_NOMINIMIZE,
                                 nullptr);
+    if (owner_was_enabled)
+        EnableWindow(owner, FALSE);
     std::atomic_bool finished{false};
     std::atomic<std::uint64_t> done{0}, total{0};
     bool success = false;

@@ -33,6 +33,8 @@ CUEの対応トラックは`AUDIO`、`MODE1/2352`、`MODE1/2048`、参照ファ�
 2. `Folders → System Card BIOS (CD only)`の`...`からBIOSを選択し、`OK`で保存します。
 3. `Game → Open...`でCUEまたはCHDを開きます。
 4. `Opening CD image`画面でBIOSとディスク全体の検証が終わるまで待ちます。中止するときはキャンセルします。
+
+CDの検証を始める前に現在のエミュレーションを停止します。検証のキャンセルや失敗後は停止状態になるため、続ける場合はイメージを開き直してください。
 5. BIOS画面でRun（初期設定は`Enter`）を押します。
 
 対応BIOSは、日本向けSystem Card 1.0／2.0／2.1とSUPER System Card 3.0です。SUPER CD-ROM²には3.0を使用してください。本体256 KiBの対応BIOSを内容で照合します。512バイトのヘッダー付きも受け付けますが、384 KiBのオーバーダンプは受け付けません。BIOS自体は同梱しません。
@@ -186,6 +188,8 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
+PSGのDDAラッチ分離に伴い、ステート形式をHuCard `RXPCE010`／CD `RXPCE011`へ更新しています。以前のステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
+
 更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
 
 設定だけを初期化する場合は、終了後に`rxpce.json`を別名で退避して起動します。正常終了時に新しい設定ファイルを保存します。ゲーム内セーブを残す場合は`backup.dat`や`.ram`を削除しないでください。旧`xpce.ini`／`xpce.json`は自動読込みしません。
@@ -241,6 +245,8 @@ You may also pass one image path on the command line. Quote paths containing spa
 2. Use the `...` button beside `Folders → System Card BIOS (CD only)` to select a BIOS, then confirm with `OK`.
 3. Open a CUE or CHD through `Game → Open...`.
 4. Wait while `Opening CD image` validates the BIOS and complete disc. You can cancel preparation.
+
+The current emulation stops before CD validation begins. After cancellation or validation failure, reopen an image to resume playing.
 5. Press Run (`Enter` by default) on the BIOS screen.
 
 Supported BIOS images are the Japanese System Card 1.0, 2.0 and 2.1, and SUPER System Card 3.0. Use 3.0 for SUPER CD-ROM². The emulator checks the contents of supported 256 KiB BIOS images. A 512-byte header is accepted; a 384 KiB overdump is not. BIOS files are not included.
@@ -393,6 +399,8 @@ Game saves and save states are separate features. Game-save RAM is written to di
 CD restoration requires the same BIOS, disc and configuration. Changing player count, 2/6-button modes or Base clock can cause a state to be rejected. Do not rename a state to reuse it with another game or image format. Old xpce states and development states with different formats are not migrated.
 
 ### 8. Updating and resetting settings
+
+Separating the PSG DDA latch changes save states to HuCard `RXPCE010` / CD `RXPCE011`. Earlier states cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 
 Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
 

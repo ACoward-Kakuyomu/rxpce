@@ -30,16 +30,17 @@ void CheckFrame(Machine& machine, FrameSurface frame) {
 bool SpritesCollide(const Machine& machine) {
     int i, x0, y0, w0, h0, x, y, w, h;
     const auto first = ReadSprite(machine, 0);
-    x0 = first.x;
-    y0 = first.y;
+    x0 = first.x & 1023;
+    y0 = first.y & 1023;
     w0 = (((first.atr >> 8) & 1) + 1) * 16;
-    h0 = (((first.atr >> 12) & 3) + 1) * 16;
+    const int heights[] = {16, 32, 64, 64};
+    h0 = heights[(first.atr >> 12) & 3];
     for (i = 1; i < 64; i++) {
         const auto spr = ReadSprite(machine, static_cast<unsigned>(i));
-        x = spr.x;
-        y = spr.y;
+        x = spr.x & 1023;
+        y = spr.y & 1023;
         w = (((spr.atr >> 8) & 1) + 1) * 16;
-        h = (((spr.atr >> 12) & 3) + 1) * 16;
+        h = heights[(spr.atr >> 12) & 3];
         if ((x < x0 + w0) && (x + w > x0) && (y < y0 + h0) && (y + h > y0))
             return true;
     }

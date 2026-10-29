@@ -281,6 +281,8 @@ BOOL InitDSound(HWND hwnd, const rxpce_audio::OutputSettings& settings) {
     stop_event.reset(CreateEvent(nullptr, TRUE, FALSE, nullptr));
     poll_timer.reset(CreateWaitableTimerEx(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                                            TIMER_ALL_ACCESS));
+    if (!poll_timer)
+        poll_timer.reset(CreateWaitableTimer(nullptr, FALSE, nullptr));
     if (!stop_event || !poll_timer || !StartSound()) {
         ReleaseDSound();
         return FALSE;

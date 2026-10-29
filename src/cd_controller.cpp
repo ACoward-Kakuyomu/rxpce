@@ -356,7 +356,8 @@ void Controller::ack(bool value) {
             ++position_;
     } else if (!value) {
         if (!ack_pending_) {
-            if (phase_ == Phase::data || phase_ == Phase::status || phase_ == Phase::message)
+            if (phase_ == Phase::command || phase_ == Phase::data || phase_ == Phase::status ||
+                phase_ == Phase::message)
                 req_ = true;
             return;
         }
@@ -462,12 +463,14 @@ void Controller::execute() {
                 return;
             }
         }
+        const bool sequential =
+            motor_ && audio_state_ == 3 && lba == next_lba_ && next_lba_ == current_lba_ + 1;
         audio_state_ = 3;
         cdda_sample_ = {};
         motor_ = true;
         remaining_ = count;
         next_lba_ = lba;
-        due_ = now_ + (lba == current_lba_ ? 0 : clock_ / 100);
+        due_ = now_ + (lba == current_lba_ || sequential ? 0 : clock_ / 100);
         remainder_ = 74;
         next_sector();
         phase_ = Phase::waiting;

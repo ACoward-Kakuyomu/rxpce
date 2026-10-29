@@ -16,6 +16,7 @@ struct DeviceHost {
     bool (*begin_frame)(void*) = nullptr;
     bool (*poll_commands)(void*) = nullptr;
     void (*present)(void*, FrameSurface, DisplayRectangle) = nullptr;
+    FrameSurface (*frame)(void*) = nullptr;
 };
 void WriteMachineIo(Machine&, const DeviceHost&, std::uint16_t address, std::uint8_t value);
 std::uint8_t ReadMachineIo(Machine&, const DeviceHost&, std::uint16_t address);

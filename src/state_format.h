@@ -6,9 +6,9 @@
 
 namespace rxpce_state {
 inline std::vector<char> header(std::size_t size, std::uint32_t flags) {
-    std::vector<char> bytes = {'R', 'X', 'P', 'C', 'E', '0', '0', '8', 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<char> bytes = {'R', 'X', 'P', 'C', 'E', '0', '1', '0', 0, 0, 0, 0, 0, 0, 0, 0};
     if (flags == 0x100 || flags == 0x200)
-        bytes[7] = '9';
+        bytes[7] = '1';
     for (unsigned i = 0; i < 4; ++i)
         bytes[8 + i] = static_cast<char>(size >> (8 * i));
     for (unsigned i = 0; i < 4; ++i)

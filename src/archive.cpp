@@ -58,6 +58,11 @@ void unzip(const std::vector<unsigned char>& archive, Cartridge& result) {
         if (mz_zip_reader_get_filename(&zip.reader, index, &name[0], length) != length)
             throw std::runtime_error("Cannot read ZIP member name");
         name.resize(length - 1);
+        const auto separator = name.find_last_of("/\\");
+        const auto base = separator == std::string::npos ? 0 : separator + 1;
+        if (name.compare(base, 2, "._") == 0 || name.rfind("__MACOSX/", 0) == 0 ||
+            name.rfind("__MACOSX\\", 0) == 0)
+            continue;
         if (!ends_with(name, ".pce"))
             continue;
         if (name.find('\0') != std::string::npos)

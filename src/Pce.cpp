@@ -65,6 +65,7 @@ namespace {
 rxpce_machine::DeviceHost& NativeDevices() {
     static rxpce_machine::DeviceHost ports = [] {
         rxpce_machine::DeviceHost value;
+        value.frame = [](void*) { return HostFrame(); };
 #ifdef SOUND
         value.psg_changed = [](void* context) {
             auto& machine = *static_cast<Machine*>(context);
@@ -443,7 +444,7 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file) {
         machine.line_period = rxpce_host::runtime.base_clock_hz / (machine.frame_lines * 60);
         LogDumpDetail("Emulation clock=%d period=%d\n", rxpce_host::runtime.base_clock_hz,
                       machine.line_period);
-        machine.timer_period = rxpce_host::runtime.base_clock_hz / 1000 * 3 * 1024 / 21480;
+        machine.timer_period = 1024;
         if (rxpce_host::InitializeHost(machine)) {
             core_started = true;
             if (InitPCE(backup_file) == 0) {

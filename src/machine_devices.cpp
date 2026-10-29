@@ -25,10 +25,45 @@ void TraceHost(const DeviceHost& host, const char* format, ...) {
 #else
 #define TRACE(...) ((void)0)
 #endif
+void FlushVideoRows(Machine& machine, FrameSurface frame, int end) {
+    const auto area = VisibleRectangle(machine);
+    const int first = std::max(machine.video.previous_line, area.y);
+    end = std::min(end, area.y + area.height);
+    if (end <= first || !machine.video.render_frame)
+        return;
+    ClearVideoRows(machine, frame, first, end - 1);
+    if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
+        RenderSprites(machine, frame, first, end, 0);
+    RenderBackground(machine, frame, first, end - 1);
+    if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
+        RenderSprites(machine, frame, first, end, 1);
+    machine.video.previous_line = end;
+}
+void FlushScrollChange(Machine& machine, FrameSurface frame, int end) {
+    if (!machine.video.scroll_changed)
+        return;
+    const auto x = machine.io.vdc[BXR].value, y = machine.io.vdc[BYR].value;
+    const auto difference = machine.video.scroll_y_difference;
+    machine.io.vdc[BXR].value = machine.video.old_scroll_x;
+    machine.io.vdc[BYR].value = machine.video.old_scroll_y;
+    machine.video.scroll_y_difference = machine.video.old_scroll_y_difference;
+    FlushVideoRows(machine, frame, end);
+    machine.io.vdc[BXR].value = x;
+    machine.io.vdc[BYR].value = y;
+    machine.video.scroll_y_difference = difference;
+    machine.video.scroll_changed = 0;
+}
+void FlushBeforePaletteWrite(Machine& machine, const DeviceHost& host) {
+    if (!host.frame || !machine.video.render_frame || machine.scanline < machine.io.minline ||
+        machine.scanline > machine.io.maxline)
+        return;
+    const auto frame = host.frame(host.context);
+    FlushScrollChange(machine, frame, machine.scanline);
+    FlushVideoRows(machine, frame, machine.scanline);
+}
 void PresentScreen(Machine& machine, const DeviceHost& host, FrameSurface frame) {
     if (host.present)
         host.present(host.context, frame, VisibleRectangle(machine));
-    ClearVideoRows(machine, frame, machine.io.minline, machine.io.maxline);
 }
 } // namespace
 DisplayRectangle VisibleRectangle(const Machine& machine) {
@@ -121,7 +156,6 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
                 machine.graphics.background_dirty()[machine.io.vdc[MAWR].value / 16] = 1;
                 machine.graphics.sprite_dirty()[machine.io.vdc[MAWR].value / 64] = 1;
                 machine.io.vdc[MAWR].value += machine.io.vdc_inc;
-                machine.io.vdc_ratch = 0;
                 return;
             case VDW:
 
@@ -139,8 +173,10 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
                                            machine.graphics.sprite_dirty(),
                                            machine.io.vdc[SOUR].value, machine.io.vdc[DISTR].value,
                                            machine.io.vdc[LENR].value, machine.io.vdc[DCR].value);
-                if ((machine.io.vdc[DCR].value & 0x02))
+                if ((machine.io.vdc[DCR].value & 0x02)) {
                     machine.io.vdc_status |= VDC_DMAfinish;
+                    machine.io.irq_status |= IRQ1;
+                }
                 return;
             case CR: {
                 static constexpr byte incsize[] = {1, 32, 64, 128};
@@ -212,11 +248,13 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             machine.io.vce_reg.set_high(V & 1);
             return;
         case 4:
+            FlushBeforePaletteWrite(machine, host);
             machine.io.vce[machine.io.vce_reg.value].set_low(V);
             rxpce_video::set_palette_color(machine.video.palette.data(), machine.io.vce_reg.value,
                                            machine.io.vce[machine.io.vce_reg.value].value);
             return;
         case 5:
+            FlushBeforePaletteWrite(machine, host);
             machine.io.vce[machine.io.vce_reg.value].set_high(V);
             rxpce_video::set_palette_color(machine.video.palette.data(), machine.io.vce_reg.value,
                                            machine.io.vce[machine.io.vce_reg.value].value);
@@ -252,6 +290,9 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             machine.io.psg[machine.io.psg_ch][3] = V & 15;
             break;
         case 4:
+            if ((V & 0xc0) == 0x40 ||
+                ((machine.io.psg[machine.io.psg_ch][4] & 0x40) && !(V & 0x40)))
+                machine.io.wavofs[machine.io.psg_ch] = 0;
             machine.io.psg[machine.io.psg_ch][4] = V;
             break;
         case 5:
@@ -259,8 +300,8 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             break;
         case 6:
             if (machine.io.psg[machine.io.psg_ch][4] & 0x40) {
-                machine.io.wave[machine.io.psg_ch][0] = V & 31;
-            } else {
+                machine.io.psg[machine.io.psg_ch][6] = V & 31;
+            } else if (!(machine.io.psg[machine.io.psg_ch][4] & 0x80)) {
                 machine.io.wave[machine.io.psg_ch][machine.io.wavofs[machine.io.psg_ch]] = V & 31;
                 machine.io.wavofs[machine.io.psg_ch] =
                     (machine.io.wavofs[machine.io.psg_ch] + 1) & 31;
@@ -290,8 +331,10 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             return;
         case 1:
             V &= 1;
-            if (V && !machine.io.timer_start)
+            if (V && !machine.io.timer_start) {
                 machine.io.timer_counter = machine.io.timer_reload;
+                machine.cpu.timer_remaining = machine.cpu.timer_period;
+            }
             machine.io.timer_start = V;
             return;
         }
@@ -480,6 +523,9 @@ bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
     if (machine.scanline > machine.io.maxline)
         machine.io.vdc_status |= VDC_InVBlank;
 
+    if (machine.scanline >= machine.io.minline && machine.scanline <= machine.io.maxline)
+        FlushScrollChange(machine, frame, machine.scanline - 1);
+
     if (machine.scanline == machine.io.minline) {
         machine.video.render_frame = !host.begin_frame || host.begin_frame(host.context);
         machine.io.vdc_status &= ~VDC_InVBlank;
@@ -493,15 +539,7 @@ bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
             ret = PceIrq;
         }
         if (machine.video.render_frame) {
-            if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-                rxpce_machine::RenderSprites(machine, frame, machine.video.previous_line, dispmax,
-                                             0);
-            rxpce_machine::RenderBackground(machine, frame, machine.video.previous_line,
-                                            dispmax - 1);
-            if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-                rxpce_machine::RenderSprites(machine, frame, machine.video.previous_line, dispmax,
-                                             1);
-            machine.video.previous_line = dispmax;
+            FlushVideoRows(machine, frame, dispmax + 1);
             PresentScreen(machine, host, frame);
         }
     }
@@ -509,41 +547,12 @@ bool TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
         if (machine.scanline == (machine.io.vdc[RCR].value & 1023) - 64) {
             if ((machine.io.vdc[CR].value & 0x04) && machine.video.render_frame &&
                 dispmin <= machine.scanline && machine.scanline <= dispmax) {
-                if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-                    rxpce_machine::RenderSprites(machine, frame, machine.video.previous_line,
-                                                 machine.scanline, 0);
-                rxpce_machine::RenderBackground(machine, frame, machine.video.previous_line,
-                                                machine.scanline - 1);
-                if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-                    rxpce_machine::RenderSprites(machine, frame, machine.video.previous_line,
-                                                 machine.scanline, 1);
-                machine.video.previous_line = machine.scanline;
+                FlushVideoRows(machine, frame, machine.scanline);
             }
             machine.io.vdc_status |= VDC_RasHit;
             if ((machine.io.vdc[CR].value & 0x04)) {
 
                 ret = PceIrq;
-            }
-        } else if (machine.video.scroll_changed) {
-            if (machine.scanline - 1 > machine.video.previous_line && machine.video.render_frame) {
-                const auto tmpScrollX = machine.io.vdc[BXR].value;
-                const auto tmpScrollY = machine.io.vdc[BYR].value;
-                const auto tmpScrollYDiff = machine.video.scroll_y_difference;
-                machine.io.vdc[BXR].value = machine.video.old_scroll_x;
-                machine.io.vdc[BYR].value = machine.video.old_scroll_y;
-                machine.video.scroll_y_difference = machine.video.old_scroll_y_difference;
-                if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-                    rxpce_machine::RenderSprites(machine, frame, machine.video.previous_line,
-                                                 machine.scanline - 1, 0);
-                rxpce_machine::RenderBackground(machine, frame, machine.video.previous_line,
-                                                machine.scanline - 2);
-                if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-                    rxpce_machine::RenderSprites(machine, frame, machine.video.previous_line,
-                                                 machine.scanline - 1, 1);
-                machine.video.previous_line = machine.scanline - 1;
-                machine.io.vdc[BXR].value = tmpScrollX;
-                machine.io.vdc[BYR].value = tmpScrollY;
-                machine.video.scroll_y_difference = tmpScrollYDiff;
             }
         }
     } else {

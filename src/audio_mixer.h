@@ -171,7 +171,7 @@ class PsgSynth {
         for (std::size_t frame = 0; frame < frames; ++frame) {
             float sample = 0;
             if (dda) {
-                sample = (static_cast<int>(state.wave[ch][0]) - 16) * (702.0f / 32768.0f);
+                sample = (static_cast<int>(reg[6] & 31) - 16) * (702.0f / 32768.0f);
             } else if (noise) {
                 voice.phase += 3000 + (reg[7] & 0x1f) * 512;
                 if (voice.phase >= rate) {

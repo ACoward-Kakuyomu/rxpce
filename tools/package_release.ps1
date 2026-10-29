@@ -61,18 +61,30 @@ if ((Test-Path -LiteralPath $archive) -or (Test-Path -LiteralPath $checksum)) {
 # An isolated stage and an explicit allowlist keep build caches, personal
 # settings, media images and unrelated files out of the release ZIP.
 $stageParent = Join-Path $outputRoot ('.stage-' + [guid]::NewGuid().ToString('N'))
-$stage = Join-Path $stageParent $name
-$null = New-Item -ItemType Directory -Path $stage
-foreach ($document in $documents) {
-    $destination = Join-Path $stage $document
-    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force
-    Copy-Item -LiteralPath (Join-Path $sourceRoot $document) -Destination $destination
+$stageFull = [System.IO.Path]::GetFullPath($stageParent)
+$outputFull = [System.IO.Path]::GetFullPath($outputRoot).TrimEnd('\')
+if ([System.IO.Path]::GetDirectoryName($stageFull) -cne $outputFull -or
+    [System.IO.Path]::GetFileName($stageFull) -notmatch '^\.stage-[0-9a-f]{32}$') {
+    throw 'Invalid staging directory.'
 }
-foreach ($binary in $binaries) {
-    Copy-Item -LiteralPath (Join-Path $buildRoot $binary) -Destination (Join-Path $stage $binary)
+try {
+    $stage = Join-Path $stageParent $name
+    $null = New-Item -ItemType Directory -Path $stage
+    foreach ($document in $documents) {
+        $destination = Join-Path $stage $document
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force
+        Copy-Item -LiteralPath (Join-Path $sourceRoot $document) -Destination $destination
+    }
+    foreach ($binary in $binaries) {
+        Copy-Item -LiteralPath (Join-Path $buildRoot $binary) -Destination (Join-Path $stage $binary)
+    }
+    Compress-Archive -LiteralPath $stage -DestinationPath $archive -CompressionLevel Optimal
+    $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    [System.IO.File]::WriteAllText($checksum, "$digest  $name.zip`n", [System.Text.UTF8Encoding]::new($false))
+    Write-Output $archive
+    Write-Output $checksum
+} finally {
+    if (Test-Path -LiteralPath $stageFull) {
+        Remove-Item -LiteralPath $stageFull -Recurse -Force
+    }
 }
-Compress-Archive -LiteralPath $stage -DestinationPath $archive -CompressionLevel Optimal
-$digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-[System.IO.File]::WriteAllText($checksum, "$digest  $name.zip`n", [System.Text.UTF8Encoding]::new($false))
-Write-Output $archive
-Write-Output $checksum
