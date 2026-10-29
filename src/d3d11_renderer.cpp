@@ -171,15 +171,19 @@ HRESULT Renderer::initialize(HWND window, int adapter_index) {
 }
 
 HRESULT Renderer::render(const std::uint32_t* rgba, int width, int height, int scale, bool present,
-                         bool nonblocking) {
+                         bool nonblocking, AspectMode aspect_mode) {
     if (!impl || !rgba || width <= 0 || height <= 0 || width > 512 || height > 256 || scale < 0 ||
-        scale > 4)
+        scale > 4 || !valid_aspect_mode(aspect_mode))
         return E_INVALIDARG;
     auto& d = *impl;
     RECT client;
     if (!GetClientRect(d.window, &client))
         return HRESULT_FROM_WIN32(GetLastError());
     if (IsIconic(d.window) || client.right <= 0 || client.bottom <= 0)
+        return S_FALSE;
+    const auto r =
+        display_placement(width, height, client.right, client.bottom, scale, aspect_mode);
+    if (r.width == 0 || r.height == 0)
         return S_FALSE;
     if (present && d.presentation.next() == PresentAction::visibility) {
         const auto status = d.swap->Present(0, DXGI_PRESENT_TEST);
@@ -196,8 +200,6 @@ HRESULT Renderer::render(const std::uint32_t* rgba, int width, int height, int s
         if (!d.presentation.acquire(ready == WAIT_OBJECT_0))
             return S_FALSE;
     }
-    if (scale == 0)
-        scale = fit_scale(width, height, client.right, client.bottom);
     HRESULT hr = d.resize(client.right, client.bottom);
     if (FAILED(hr))
         return hr;
@@ -237,7 +239,6 @@ HRESULT Renderer::render(const std::uint32_t* rgba, int width, int height, int s
     d.context->OMSetRenderTargets(1, &target, nullptr);
     const float black[] = {0, 0, 0, 1};
     d.context->ClearRenderTargetView(target, black);
-    const auto r = placement(width, height, d.width, d.height, scale);
     const D3D11_VIEWPORT viewport = {static_cast<float>(r.x),
                                      static_cast<float>(r.y),
                                      static_cast<float>(r.width),

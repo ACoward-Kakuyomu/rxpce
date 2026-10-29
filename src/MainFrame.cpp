@@ -282,7 +282,7 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path) {
             return FALSE;
         }
     }
-    SetVideoZoom(m_config.video.zoom);
+    SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
     rxpce_cd::queue(std::move(session));
     rxpce_host::runtime.rom_directory = std::filesystem::path(path).parent_path();
     return StartMainLoop();
@@ -310,7 +310,7 @@ BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path) {
             return FALSE;
         }
     }
-    SetVideoZoom(m_config.video.zoom);
+    SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
     rxpce_cd::queue(nullptr);
     rxpce_rom::queue(std::move(image));
     rxpce_host::runtime.rom_directory = source.parent_path();
@@ -448,6 +448,7 @@ BOOL CMainFrame::LoadProfile() {
 void CMainFrame::ApplySettings() {
     video_settings.adapter = m_config.video.adapter;
     video_settings.zoom = m_config.video.zoom;
+    video_settings.aspect_mode = m_config.video.aspect_mode;
     video_settings.palette_file = rxpce_paths::from_utf8(m_config.video.palette_file);
     rxpce_host::runtime.auto_frame_skip = m_config.video.auto_frame_skip;
     rxpce_host::runtime.frame_skip = m_config.video.frame_skip;
@@ -470,6 +471,7 @@ void CMainFrame::ApplySettings() {
 void CMainFrame::CaptureRuntime() {
     auto runtime = m_config;
     runtime.video.zoom = video_settings.zoom;
+    runtime.video.aspect_mode = video_settings.aspect_mode;
     runtime.video.auto_frame_skip = rxpce_host::runtime.auto_frame_skip.load();
     runtime.video.frame_skip = rxpce_host::runtime.frame_skip.load();
     runtime.advanced.show_fps = rxpce_host::runtime.show_fps != FALSE;
@@ -509,7 +511,7 @@ void CMainFrame::OnSettings() {
     m_overrides.rom |= dialog.value.folders.rom != original.folders.rom;
     m_config = dialog.value;
     m_configWritable = true;
-    SetVideoZoom(m_config.video.zoom);
+    SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
 }
 void CMainFrame::StopEmulation() {
     StopMainLoop();

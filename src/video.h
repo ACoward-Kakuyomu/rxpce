@@ -12,6 +12,7 @@ extern std::atomic_bool bActiveApp, bFullScreen;
 struct VideoSettings {
     int adapter = -1;
     int zoom = 1;
+    rxpce_video::AspectMode aspect_mode = rxpce_video::AspectMode::square_pixels;
     std::filesystem::path palette_file;
 };
 extern VideoSettings video_settings; // UI thread only, except during startup/shutdown.
@@ -25,4 +26,5 @@ void PresentVideo(const rxpce_video::Pixel* pixels, int stride, int rows, int x,
 void ChangeWindowMode();
 void ZoomWindow();
 void SetVideoZoom(int zoom);
+void SetVideoPresentation(rxpce_video::AspectMode mode, int zoom);
 void ResizeVideoWindow(int width, int height);

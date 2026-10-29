@@ -47,7 +47,8 @@ enum {
     log_enabled,
     fps,
     xinput_support,
-    directinput_support
+    directinput_support,
+    aspect_ratio = 2210
 };
 std::wstring key_name(int key) {
     wchar_t name[128]{};
@@ -212,6 +213,12 @@ LRESULT SettingsDialog::OnInit(UINT, WPARAM, LPARAM, BOOL&) {
         for (int n = 1; n <= 4; ++n)
             combo_item(zoom, std::to_wstring(n) + L"x", n);
         select_data(zoom, value.video.zoom);
+        label(0, L"Aspect ratio", 215, 54, 65);
+        add(0, L"COMBOBOX", L"", aspect_ratio, 285, 52, 105, 100, combo);
+        combo_item(aspect_ratio, L"Square Pixels",
+                   static_cast<int>(rxpce_video::AspectMode::square_pixels));
+        combo_item(aspect_ratio, L"TV (4:3)", static_cast<int>(rxpce_video::AspectMode::tv_4_3));
+        select_data(aspect_ratio, static_cast<int>(value.video.aspect_mode));
         add(0, L"BUTTON", L"Automatic frame skip (60 Hz)", auto_skip, 20, 76, 300, 14,
             WS_TABSTOP | BS_AUTOCHECKBOX);
         CheckDlgButton(auto_skip, value.video.auto_frame_skip);
@@ -601,6 +608,7 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
             value.audio.backend = IsDlgButtonChecked(wasapi_backend) ? "wasapi" : "directsound";
             value.video.adapter = selected(adapter);
             value.video.zoom = selected(zoom);
+            value.video.aspect_mode = static_cast<rxpce_video::AspectMode>(selected(aspect_ratio));
             value.video.auto_frame_skip = IsDlgButtonChecked(auto_skip) != 0;
             value.video.frame_skip = number(skip);
             value.video.palette_file = text(palette);

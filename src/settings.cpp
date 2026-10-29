@@ -135,6 +135,7 @@ std::filesystem::path config_path(const std::filesystem::path& executable) {
 }
 void merge_runtime(Settings& p, const Settings& r, const RuntimeOverrides& o) {
     p.video.zoom = r.video.zoom;
+    p.video.aspect_mode = r.video.aspect_mode;
     if (!o.auto_skip)
         p.video.auto_frame_skip = r.video.auto_frame_skip;
     if (!o.skip)
@@ -148,6 +149,7 @@ bool validate(const Settings& s, std::string& error) {
     try {
         require(s.audio.backend == "directsound" || s.audio.backend == "wasapi",
                 "Invalid audio backend");
+        require(rxpce_video::valid_aspect_mode(s.video.aspect_mode), "Invalid aspect ratio");
         require(s.video.adapter >= -2 && s.video.zoom >= 1 && s.video.zoom <= 4 &&
                     s.video.frame_skip >= 0 && s.video.frame_skip <= 15,
                 "Invalid video setting");
@@ -216,6 +218,11 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         const auto& v = object(field(r, "video"));
         read(v, "adapter", s.video.adapter);
         read(v, "zoom", s.video.zoom);
+        std::string aspect = "square_pixels";
+        read(v, "aspect_mode", aspect);
+        require(aspect == "square_pixels" || aspect == "tv_4_3", "Invalid aspect ratio");
+        s.video.aspect_mode = aspect == "tv_4_3" ? rxpce_video::AspectMode::tv_4_3
+                                                 : rxpce_video::AspectMode::square_pixels;
         read(v, "frame_skip", s.video.frame_skip);
         read(v, "auto_frame_skip", s.video.auto_frame_skip);
         read(v, "palette_file", s.video.palette_file);
@@ -266,9 +273,12 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
     }
 }
 std::string encode(const Settings& s) {
+    require(rxpce_video::valid_aspect_mode(s.video.aspect_mode), "Invalid aspect ratio");
     picojson::object v, a, i, f, x, r, cd;
     v["adapter"] = val(s.video.adapter);
     v["zoom"] = val(s.video.zoom);
+    v["aspect_mode"] = val(std::string(
+        s.video.aspect_mode == rxpce_video::AspectMode::tv_4_3 ? "tv_4_3" : "square_pixels"));
     v["frame_skip"] = val(s.video.frame_skip);
     v["auto_frame_skip"] = val(s.video.auto_frame_skip);
     v["palette_file"] = val(s.video.palette_file);

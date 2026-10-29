@@ -3,9 +3,11 @@
 #include <atomic>
 #include <string>
 #include <filesystem>
+#include "video_layout.h"
 namespace rxpce_config {
 struct Settings {
     struct Video {
+        rxpce_video::AspectMode aspect_mode = rxpce_video::AspectMode::square_pixels;
         int adapter = -1, zoom = 1, frame_skip = 0;
         bool auto_frame_skip = true;
         std::string palette_file;

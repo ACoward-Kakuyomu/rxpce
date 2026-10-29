@@ -106,7 +106,7 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 
 ### 6. 設定の適用時期
 
-`OK`は設定を保存し、`Cancel`は変更を破棄します。倍率を除く設定は、次のエミュレーション開始時に反映します。Escで停止してから、同じイメージを開き直せます。F2/F3/F4/F7での実行中変更は、その場で反映します。
+`OK`は設定を保存し、`Cancel`は変更を破棄します。倍率とアスペクト比を除く設定は、次のエミュレーション開始時に反映します。Escで停止してから、同じイメージを開き直せます。F2/F3/F4/F7での実行中変更は、その場で反映します。
 
 #### Video
 
@@ -114,13 +114,18 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 | --- | --- |
 | D3D11 device | 初期値は`Automatic (hardware / WARP fallback)`。描画の問題を切り分ける場合は`WARP (software)`でも確認できます |
 | Window scale | 1～4倍。OK時に反映。全画面中はウィンドウへ戻る際の倍率として保持 |
+| Aspect ratio | Square Pixels（既定）／TV (4:3)。OK時に反映 |
 | Automatic frame skip (60 Hz) | 初期値は有効。60 Hzを目標に速度を制御し、処理が間に合わないときに描画を追加スキップ |
 | Frame skip (0-15) | 次に描画するまでにスキップする枚数。自動時は最低スキップ枚数、非自動時は固定枚数 |
 | Palette file (empty = linear RGB) | 外部パレット。512色×RGB各1バイト、1536バイト。未指定・サイズ不正・読込み失敗では標準RGBを使用 |
 
 **自動フレームスキップを無効にすると速度制限が外れます。** スキップ値0でもゲームが高速に進みます。通常のプレイでは有効にしてください。負荷が高すぎる場合は自動でも通常速度を維持できないことがあります。
 
-ウィンドウ表示は320×240を基本とし、小さい映像は中央に配置します。512画素幅など大きい映像では必要に応じて領域を広げます。全画面は枠なしで、映像が収まる最大の整数倍率を使い、余白は黒になります。補間や縦横比補正は行いません。
+`Square Pixels` は元の画素を正方形として整数倍に拡大します。ウィンドウは320×240以上で小さい映像を中央配置し、512画素幅などでは領域を広げます。全画面は収まる最大の整数倍率です。
+
+`TV (4:3)` はコアが出力する可視画像全体を4:3へ補正します。ウィンドウは320×240を基準とした1～4倍で、ゲーム側の解像度が変わっても同じ大きさを保ちます。全画面は領域に収まる最大の4:3矩形へ表示し、余白は黒です。1920×1080では1440×1080の映像と左右240画素の黒帯になります。
+
+どちらも補間なしです。TV表示は元の画素の整数倍ではなく、512画素幅の1倍表示などでは縮小が入り、細い線や文字の見え方が変わります。必要に応じて倍率を上げてください。画像内の黒枠の自動除去、追加のオーバースキャン、実機映像信号の厳密な再現やCRTフィルターは行いません。表示設定はステート復帰では巻き戻しません。
 
 #### Audio
 
@@ -193,7 +198,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 | ゲームが速すぎる | F2またはVideo設定でAutomatic frame skipを有効にする |
 | パッドが反応しない | Input device、Players、Advancedの入力方式、Connected表示を確認。OK後にゲームを開き直す |
 | 6ボタンが使えない | 対応ゲームであることと、各PlayerのButtons設定を確認 |
-| 設定を変えても反映しない | Window scale以外はEsc停止後に開き直す。F10のResetだけでは未適用設定は反映しない |
+| 設定を変えても反映しない | Window scaleとAspect ratio以外はEsc停止後に開き直す。F10のResetだけでは未適用設定は反映しない |
 | 音が出ない／途切れる | Enable audio、Windowsの音量/出力先を確認。Latencyを増やして開き直す。別の出力方式でも確認 |
 | CDが開けない | 対応BIOSとサイズ、CUEが参照するBIN、対応CHDかを確認。検証完了まで待つ |
 | CHDだけ起動しない／音声位置がおかしい | 元CUEで確認。変換時のトラック位置とプリギャップの保持を確認 |
@@ -309,7 +314,7 @@ XInput displays slot and connection status, such as `XInput 1 (Connected)`, rath
 
 ### 6. Settings and when they apply
 
-`OK` saves settings; `Cancel` discards edits. Except for window scale, settings apply at the next emulation start. Press Esc and reopen the image. F2/F3/F4/F7 changes take effect immediately during play.
+`OK` saves settings; `Cancel` discards edits. Except for window scale and aspect ratio, settings apply at the next emulation start. Press Esc and reopen the image. F2/F3/F4/F7 changes take effect immediately during play.
 
 #### Video
 
@@ -317,13 +322,18 @@ XInput displays slot and connection status, such as `XInput 1 (Connected)`, rath
 | --- | --- |
 | D3D11 device | Defaults to `Automatic (hardware / WARP fallback)`. Try `WARP (software)` when diagnosing rendering issues |
 | Window scale | 1×–4×; applies on OK. In fullscreen, this is the scale retained for returning to a window |
+| Aspect ratio | Square Pixels (default) / TV (4:3); applies on OK |
 | Automatic frame skip (60 Hz) | Enabled by default; targets 60 Hz and skips additional rendering when behind |
 | Frame skip (0-15) | Frames skipped before the next rendered frame. A minimum in automatic mode, a fixed count otherwise |
 | Palette file (empty = linear RGB) | External palette: 512 RGB entries, 1536 bytes. Empty, invalid-size or unreadable files use standard RGB |
 
 **Disabling automatic frame skip removes the speed limit**, even with frame skip set to zero. Keep it enabled for normal play. Excessive host load can still prevent normal speed.
 
-The window uses a 320×240 base area and centers smaller images. Larger images, such as 512-pixel-wide modes, expand the area as needed. Borderless fullscreen uses the largest fitting integer scale with black borders. No filtering or aspect-ratio correction is applied.
+`Square Pixels` enlarges source pixels equally in both directions using integer scales. The window uses at least 320×240 and centers smaller images; wider modes expand it. Fullscreen uses the largest fitting integer scale.
+
+`TV (4:3)` maps the complete visible image from the core to a 4:3 rectangle. Window sizes are 1×–4× a fixed 320×240 base, even when the game changes resolution. Fullscreen uses the largest fitting 4:3 rectangle with black borders: on a 1920×1080 display, the image is 1440×1080 with 240-pixel side borders.
+
+Both modes use nearest-neighbor sampling. TV scaling is not restricted to source-pixel integer scales; a 512-pixel-wide image at 1× is downscaled, which can change fine lines and text. Increase the window scale if needed. There is no automatic trimming of embedded black borders, additional overscan, exact signal reconstruction or CRT filter. Loading a state does not restore display preferences.
 
 #### Audio
 
@@ -396,7 +406,7 @@ To reset settings only, close the app, rename `rxpce.json` as a backup and resta
 | Game runs too fast | Enable Automatic frame skip with F2 or in Video settings |
 | Gamepad does not respond | Check Input device, Players, enabled backends and Connected status; confirm with OK and reopen the game |
 | Six-button controls do not work | Check game support and each Player's Buttons setting |
-| Settings appear unchanged | Except for scale, stop with Esc and reopen. F10 Reset does not apply pending settings |
+| Settings appear unchanged | Except for scale and aspect ratio, stop with Esc and reopen. F10 Reset does not apply pending settings |
 | No audio / broken audio | Check Enable audio and Windows volume/output device; increase Latency and reopen, or try the other backend |
 | Cannot open a CD | Check the supported BIOS/size, referenced BIN files and CHD type; allow validation to complete |
 | Only the CHD fails / audio positions are wrong | Check the original CUE, and whether conversion preserved track positions and pregaps |

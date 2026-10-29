@@ -22,7 +22,7 @@ rxpceは、かつて公開されていたxpceをWindows 11向けに改修したP
 | HuCardファイル | `.pce`、ZIP内の最初の`.pce`。特殊HuCardのPopulous／Street Fighter II'にも対応 |
 | CDイメージ | CUE＋BIN、親ファイルを必要としないCD用CHD v5 |
 | 入力 | キーボード、XInput、DirectInput、1～5人、2／6ボタン |
-| 表示 | Direct3D 11、整数倍・補間なし、ウィンドウ／ボーダーレス全画面 |
+| 表示 | Direct3D 11、Square Pixels（整数倍）／TV (4:3)、補間なし、ウィンドウ／ボーダーレス全画面 |
 | 音声 | WASAPI／DirectSound、PSG・CD-DA・ADPCM |
 | 保存 | ゲーム内セーブ用RAM、ステート保存・復帰 |
 
@@ -46,7 +46,7 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 3. CDゲームでは、先に`View → Settings... → Folders → System Card BIOS (CD only)`で対応BIOSを指定し、`.cue`または`.chd`を開きます。BIOS画面ではRun（初期設定は`Enter`）を押してゲームを開始します。
 4. ゲームパッドを使う場合は`Settings → Input`でプレイヤーの`Input device`を選択します。初期状態の入力デバイスは`Keyboard`です。
 
-設定変更の多くは**次のエミュレーション開始時**に反映されます。`Esc`で停止し、ゲームを開き直してください。`Window scale`だけは`OK`確定時に反映されます。F10のResetは設定を適用し直す操作ではありません。
+設定変更の多くは**次のエミュレーション開始時**に反映されます。`Esc`で停止し、ゲームを開き直してください。`Window scale`と`Aspect ratio`は`OK`確定時に反映されます。F10のResetは設定を適用し直す操作ではありません。
 
 ### よく使う操作
 
@@ -94,7 +94,7 @@ See [Building](BUILDING.md#english) for source builds and the [CUE conversion he
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
 | CD images | CUE/BIN and standalone CD CHD v5 images |
 | Input | Keyboard, XInput, DirectInput; 1–5 players; 2- and 6-button controllers |
-| Video | Direct3D 11, integer scaling without filtering, windowed and borderless fullscreen |
+| Video | Direct3D 11, Square Pixels (integer scaling) / TV (4:3), nearest-neighbor sampling, windowed and borderless fullscreen |
 | Audio | WASAPI or DirectSound; PSG, CD-DA and ADPCM |
 | Saving | Game-save RAM and save states |
 
@@ -116,7 +116,7 @@ Extract the complete distribution into a writable folder and run `rxpce.exe`. Av
 3. For a CD game, first select a supported BIOS under `View → Settings... → Folders → System Card BIOS (CD only)`, then open its `.cue` or `.chd`. Press Run (`Enter` by default) on the BIOS screen.
 4. To use a gamepad, choose its `Input device` in `Settings → Input`. The default device is `Keyboard`.
 
-Most settings apply at the **next emulation start**. Press `Esc` and reopen the image. `Window scale` applies when you confirm with `OK`. F10 Reset does not reapply pending settings.
+Most settings apply at the **next emulation start**. Press `Esc` and reopen the image. `Window scale` and `Aspect ratio` apply when you confirm with `OK`. F10 Reset does not reapply pending settings.
 
 | Key | Action |
 | --- | --- |

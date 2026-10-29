@@ -1,4 +1,5 @@
 #pragma once
+#include "video_layout.h"
 #include <array>
 #include <cstdint>
 #include <istream>
@@ -53,18 +54,4 @@ inline bool convert_frame(const Pixel* source, int stride, int rows, int x, int 
     return true;
 }
 
-struct Placement {
-    int x, y, width, height;
-};
-inline int fit_scale(int width, int height, int client_width, int client_height) {
-    if (width <= 0 || height <= 0)
-        return 1;
-    const int horizontal = client_width / width, vertical = client_height / height;
-    const int scale = horizontal < vertical ? horizontal : vertical;
-    return scale < 1 ? 1 : scale;
-}
-inline Placement placement(int width, int height, int client_width, int client_height, int scale) {
-    return {(client_width - width * scale) / 2, (client_height - height * scale) / 2, width * scale,
-            height * scale};
-}
 } // namespace rxpce_video

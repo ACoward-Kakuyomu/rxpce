@@ -13,7 +13,11 @@ namespace {
 rxpce_video::Renderer renderer;
 rxpce_video::Palette palette;
 std::vector<std::uint32_t> frame;
-std::atomic_int zoom{1};
+struct PresentationOptions {
+    int zoom = 1;
+    rxpce_video::AspectMode mode = rxpce_video::AspectMode::square_pixels;
+};
+std::atomic<PresentationOptions> presentation{PresentationOptions{}};
 int source_width = 320, source_height = 240; // UI thread only.
 RECT saved_window = {};
 LONG_PTR saved_style = 0;
@@ -49,7 +53,7 @@ BOOL InitializeVideo() {
 }
 
 void PrepareVideoWindow() {
-    zoom = video_settings.zoom;
+    presentation.store({video_settings.zoom, video_settings.aspect_mode});
     ResizeVideoWindow(320, 240);
 }
 
@@ -65,7 +69,8 @@ BOOL ResetVideoToIdle() {
     if (!InitializeVideo())
         return FALSE;
     frame.assign(320 * 240, 0xff000000u);
-    return SUCCEEDED(renderer.render(frame.data(), 320, 240, video_settings.zoom));
+    return SUCCEEDED(renderer.render(frame.data(), 320, 240, video_settings.zoom, true, false,
+                                     video_settings.aspect_mode));
 }
 
 bool SetFullscreenCursor(int hit_test, bool dialog_open) {
@@ -90,8 +95,9 @@ void PresentVideo(const rxpce_video::Pixel* pixels, int stride, int rows, int x,
             return;
         device_lost = false;
     }
-    const HRESULT hr = renderer.render(frame.data(), width, height, bFullScreen ? 0 : zoom.load(),
-                                       true, nonblocking);
+    const auto options = presentation.load();
+    const HRESULT hr = renderer.render(frame.data(), width, height, bFullScreen ? 0 : options.zoom,
+                                       true, nonblocking, options.mode);
     if (FAILED(hr) && hr != last_error)
         LogDumpDetail("D3D11 render failed: %08lX\n", static_cast<unsigned long>(hr));
     last_error = hr;
@@ -120,9 +126,11 @@ void ResizeVideoWindow(int width, int height) {
         }
         return;
     }
-    const int canvas_width = width < 320 ? 320 : width;
-    const int canvas_height = height < 240 ? 240 : height;
-    RECT client = {0, 0, canvas_width * zoom.load(), canvas_height * zoom.load()};
+    const auto options = presentation.load();
+    const auto canvas = rxpce_video::window_size(width, height, options.zoom, options.mode);
+    if (canvas.width == 0 || canvas.height == 0)
+        return;
+    RECT client = {0, 0, canvas.width, canvas.height};
     RECT current;
     if (GetClientRect(hwnd, &current) && current.right == client.right &&
         current.bottom == client.bottom)
@@ -144,10 +152,14 @@ void ZoomWindow() {
 }
 
 void SetVideoZoom(int scale) {
-    if (scale < 1 || scale > 4)
+    SetVideoPresentation(video_settings.aspect_mode, scale);
+}
+void SetVideoPresentation(rxpce_video::AspectMode mode, int scale) {
+    if (scale < 1 || scale > 4 || !rxpce_video::valid_aspect_mode(mode))
         return;
     video_settings.zoom = scale;
-    zoom = scale;
+    video_settings.aspect_mode = mode;
+    presentation.store({scale, mode});
     ResizeVideoWindow(0, 0);
 }
 
