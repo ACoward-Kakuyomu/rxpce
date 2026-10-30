@@ -15,6 +15,12 @@ std::unique_ptr<rxpce_state::MachineSnapshot> capture_machine(const rxpce_machin
     std::copy_n(machine.backup_ram.data(), value->backup.size(), value->backup.begin());
     value->bank = machine.mapper().selection();
     value->cpu = machine.cpu;
+    value->vdc = {machine.vdc.clock.config(), machine.vdc.clock.state(), machine.vdc.dma.state(),
+                  machine.vdc.cpu};
+    if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
+        value->vdc.config.first_active = static_cast<unsigned>(machine.io.minline);
+        value->vdc.config.last_active = static_cast<unsigned>(machine.io.maxline);
+    }
     if (flags & 1)
         std::copy_n(machine.populous.data(), value->populous.size(), value->populous.begin());
     return value;
@@ -31,6 +37,11 @@ void apply_machine(rxpce_machine::Machine& machine, const MachineSnapshot& value
     const auto revision = machine.cpu.revision + 1;
     machine.cpu = value.cpu;
     machine.cpu.revision = revision;
+    machine.vdc.clock = rxpce_video::VdcTiming(value.vdc.config);
+    machine.vdc.clock.restore(value.vdc.timing);
+    machine.vdc.dma.restore(value.vdc.dma);
+    machine.vdc.cpu = value.vdc.cpu;
+    machine.vdc.last_dma_irq_time = 0;
     if (flags & 1)
         std::copy(value.populous.begin(), value.populous.end(), machine.populous.data());
     rxpce_machine::ResetVideoAfterLoad(machine, frame);

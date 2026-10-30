@@ -1,4 +1,5 @@
 #pragma once
+#include "vdc_mode.h"
 #include "machine_memory.h"
 #include "machine_io.h"
 #include "graphics_memory.h"
@@ -7,6 +8,7 @@
 #include "cartridge.h"
 #include "cd_session.h"
 #include "cd_controller.h"
+#include "vdc_device.h"
 #include <array>
 #include <memory>
 #include <string>
@@ -41,6 +43,7 @@ class Machine {
     Machine& operator=(Machine&&) = delete;
 
     Configuration configuration;
+    rxpce_video::VdcMode vdc_mode = rxpce_video::VdcMode::accurate;
     std::array<std::uint8_t, main_ram_bytes> ram{};
     std::array<std::uint8_t, backup_ram_bytes> backup_ram{};
     std::array<std::uint8_t, 32768> populous{};
@@ -50,6 +53,7 @@ class Machine {
     VideoState video;
     IoState io;
     PceCpu cpu;
+    rxpce_video::VdcDevice vdc;
     int line_period = 1, timer_period = 1, frame_lines = 263, scanline = 0;
     bool frame_boundary_pending = false; // Runtime-only request, consumed at a CPU safe point.
     std::unique_ptr<rxpce_cd::Session> cd_session;

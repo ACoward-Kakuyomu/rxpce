@@ -17,14 +17,32 @@ std::uint32_t HuC6280::physical(std::uint16_t a) const {
 }
 std::uint8_t HuC6280::read(std::uint16_t a) {
     const auto p = physical(a);
-    if (bus_.wait)
-        waits_ += bus_.wait(p, false, bus_.context);
+    bus_wait(p, false);
     return bus_.read(p, bus_.context);
 }
 void HuC6280::write_physical(std::uint32_t p, std::uint8_t value) {
-    if (bus_.wait)
-        waits_ += bus_.wait(p, true, bus_.context);
+    bus_wait(p, true);
     bus_.write(p, value, bus_.context);
+}
+void HuC6280::bus_wait(std::uint32_t physical, bool write) {
+    auto sync = [&] {
+        if (in_step_ && (bus_.synchronize || bus_.ready)) {
+            state_.elapsed = instruction_time_ + std::uint64_t(waits_) * instruction_divisor_;
+            if (bus_.synchronize)
+                bus_.synchronize(state_.elapsed, bus_.context);
+        }
+    };
+    sync();
+    if (bus_.wait)
+        waits_ += bus_.wait(physical, write, bus_.context);
+    sync();
+    if (in_step_ && bus_.ready) {
+        unsigned extra;
+        while ((extra = bus_.ready(physical, write, bus_.context)) != 0) {
+            waits_ += extra;
+            sync();
+        }
+    }
 }
 void HuC6280::write(std::uint16_t a, std::uint8_t v) {
     write_physical(physical(a), v);
@@ -117,11 +135,15 @@ unsigned HuC6280::enter_interrupt(std::uint16_t vector, bool software) {
 StepResult HuC6280::step() {
     waits_ = 0;
     const unsigned divisor = state_.low_speed ? 4 : 1;
+    instruction_time_ = state_.elapsed;
+    instruction_divisor_ = divisor;
+    in_step_ = true;
     if (state_.transfer.opcode) {
         unsigned cycles = continue_transfer();
         cycles += waits_;
         const unsigned elapsed = cycles * divisor;
-        state_.elapsed += elapsed;
+        state_.elapsed = instruction_time_ + elapsed;
+        in_step_ = false;
         return {cycles, elapsed, true, false, state_.transfer.opcode == 0};
     }
     unsigned cycles = 0;
@@ -148,7 +170,8 @@ StepResult HuC6280::step() {
     }
     cycles += waits_;
     const unsigned elapsed = cycles * divisor;
-    state_.elapsed += elapsed;
+    state_.elapsed = instruction_time_ + elapsed;
+    in_step_ = false;
     return {cycles, elapsed, valid, interrupt, state_.transfer.opcode == 0};
 }
 

@@ -1,6 +1,7 @@
 #include "state_service.h"
 #include "file_paths.h"
 #include "machine_runtime.h"
+#include "machine_vdc.h"
 #include "host_runtime.h"
 #include "host_settings.h"
 #include "psg_snapshot.h"
@@ -23,7 +24,8 @@ using rxpce_host::CurrentMachine;
 bool IsCdActive();
 
 std::filesystem::path StateFilePath() {
-    auto path = rxpce_rom::state_path(CurrentMachine().source, rxpce_host::runtime.state_directory);
+    auto path = rxpce_rom::state_path(CurrentMachine().source, rxpce_host::runtime.state_directory,
+                                      CurrentMachine().vdc_mode);
     const auto parent = path.parent_path();
     if (!parent.empty()) {
         std::error_code error;
@@ -38,6 +40,7 @@ namespace {
 rxpce_state::SnapshotRequirements requirements(bool cd) {
     auto& machine = CurrentMachine();
     rxpce_state::SnapshotRequirements value;
+    value.vdc_mode = machine.vdc_mode;
     value.flags = cd ? CdStateFlags() : CartridgeFlags();
     value.line_period = machine.cpu.line_period;
     value.timer_period = machine.cpu.timer_period;
@@ -53,6 +56,7 @@ void SaveState() {
     const bool cd = IsCdActive();
     try {
         const auto binding = requirements(cd);
+        rxpce_machine::AdvanceMachineVdc(machine, machine.cpu.cpu.elapsed);
         rxpce_audio::PsgPhaseState sound;
         if (cd) {
             SynchronizeCdState();
@@ -64,7 +68,7 @@ void SaveState() {
                           : rxpce_state::encode_hucard(*snapshot, binding);
         if (cd)
             AppendCdState(payload, sound);
-        auto file = rxpce_state::header(payload.size(), binding.flags);
+        auto file = rxpce_state::header(payload.size(), binding.flags, binding.vdc_mode);
         file.insert(file.end(), payload.begin(), payload.end());
         std::string error;
         const bool ok =
@@ -95,14 +99,15 @@ void LoadState() {
         if (cd) {
             std::string error;
             if (!rxpce_cd::read_state_payload(CdStatePath(rxpce_host::runtime.state_directory),
-                                              total, binding.flags, payload, error)) {
+                                              total, binding.flags, payload, error,
+                                              binding.vdc_mode)) {
                 LogDumpDetail("CD state rejected: %s\n", error.c_str());
                 SetInfoString("Invalid or unreadable CD state file");
                 return;
             }
         } else {
             std::ifstream input(StateFilePath(), std::ios::binary);
-            if (!rxpce_state::read(input, total, binding.flags, payload)) {
+            if (!rxpce_state::read(input, total, binding.flags, payload, binding.vdc_mode)) {
                 LogDumpDetail("State rejected: header or length mismatch\n");
                 SetInfoString("Invalid or unreadable state file");
                 return;

@@ -37,7 +37,8 @@ bool read_binding(rxpce_state::Reader& r, const StateBinding& expected, std::str
     }
     return false;
 }
-std::wstring state_path(const std::wstring& image, const std::wstring& folder) {
+std::wstring state_path(const std::wstring& image, const std::wstring& folder,
+                        rxpce_video::VdcMode mode) {
     const auto slash = image.find_last_of(L"/\\");
     const auto base = slash == std::wstring::npos ? 0 : slash + 1;
     auto name = image.substr(base);
@@ -54,7 +55,7 @@ std::wstring state_path(const std::wstring& image, const std::wstring& folder) {
         folder.empty() || folder == L"."
             ? image.substr(0, base)
             : folder + ((folder.back() == L'/' || folder.back() == L'\\') ? L"" : L"\\");
-    return directory + name + L".st0";
+    return directory + name + rxpce_video::state_extension(mode);
 }
 bool read_state_file(const std::wstring& path, std::size_t size, std::vector<char>& output,
                      std::string& error) {
@@ -85,12 +86,12 @@ bool read_state_file(const std::wstring& path, std::size_t size, std::vector<cha
     return true;
 }
 bool read_state_payload(const std::wstring& path, std::size_t payload_size, std::uint32_t flags,
-                        std::vector<char>& output, std::string& error) {
+                        std::vector<char>& output, std::string& error, rxpce_video::VdcMode mode) {
     if (payload_size > 2 * 1024 * 1024 - rxpce_state::header_size) {
         error = "Invalid CD state size";
         return false;
     }
-    const auto expected = rxpce_state::header(payload_size, flags);
+    const auto expected = rxpce_state::header(payload_size, flags, mode);
     std::vector<char> file;
     if (!read_state_file(path, expected.size() + payload_size, file, error))
         return false;

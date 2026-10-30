@@ -48,6 +48,7 @@ enum {
     fps,
     xinput_support,
     directinput_support,
+    vdc_emulation = 2205,
     aspect_ratio = 2210
 };
 std::wstring key_name(int key) {
@@ -300,15 +301,21 @@ LRESULT SettingsDialog::OnInit(UINT, WPARAM, LPARAM, BOOL&) {
         add(4, L"EDIT", L"", clock_edit, 130, 30, 130, 14, edit | ES_NUMBER, WS_EX_CLIENTEDGE);
         set_number(clock_edit, value.advanced.base_clock_hz);
         label(4, L"1,000,000 - 85,920,000 Hz; rounded down to 1,000 Hz.", 20, 52, 375);
-        add(4, L"BUTTON", L"Enable diagnostic log", log_enabled, 20, 76, 300, 14,
+        label(4, L"VDC emulation", 20, 74, 100);
+        add(4, L"COMBOBOX", L"", vdc_emulation, 130, 72, 130, 70, combo);
+        combo_item(vdc_emulation, L"Accurate", static_cast<int>(rxpce_video::VdcMode::accurate));
+        combo_item(vdc_emulation, L"Fast", static_cast<int>(rxpce_video::VdcMode::fast));
+        select_data(vdc_emulation, static_cast<int>(value.advanced.vdc_emulation));
+        label(4, L"Fast uses simplified DMA timing; separate state files.", 20, 92, 375);
+        add(4, L"BUTTON", L"Enable diagnostic log", log_enabled, 20, 112, 230, 14,
             WS_TABSTOP | BS_AUTOCHECKBOX);
         CheckDlgButton(log_enabled, value.advanced.log);
-        add(4, L"BUTTON", L"Show FPS", fps, 20, 96, 300, 14, WS_TABSTOP | BS_AUTOCHECKBOX);
+        add(4, L"BUTTON", L"Show FPS", fps, 270, 112, 120, 14, WS_TABSTOP | BS_AUTOCHECKBOX);
         CheckDlgButton(fps, value.advanced.show_fps);
-        add(4, L"BUTTON", L"XInput support", xinput_support, 20, 116, 300, 14,
+        add(4, L"BUTTON", L"XInput support", xinput_support, 20, 132, 160, 14,
             WS_TABSTOP | BS_AUTOCHECKBOX);
         CheckDlgButton(xinput_support, value.input.xinput_enabled);
-        add(4, L"BUTTON", L"DirectInput support", directinput_support, 20, 136, 300, 14,
+        add(4, L"BUTTON", L"DirectInput support", directinput_support, 200, 132, 190, 14,
             WS_TABSTOP | BS_AUTOCHECKBOX);
         CheckDlgButton(directinput_support, value.input.directinput_enabled);
         initializing = false;
@@ -620,6 +627,8 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
                 static_cast<int>(::SendMessage(GetDlgItem(coop), TBM_GETPOS, 0, 0));
             value.folders.rom = text(rom);
             value.folders.state = text(state);
+            value.advanced.vdc_emulation =
+                static_cast<rxpce_video::VdcMode>(selected(vdc_emulation));
             value.advanced.base_clock_hz = number(clock_edit);
             value.advanced.log = IsDlgButtonChecked(log_enabled) != 0;
             value.advanced.show_fps = IsDlgButtonChecked(fps) != 0;

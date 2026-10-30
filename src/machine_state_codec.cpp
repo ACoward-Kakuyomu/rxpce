@@ -16,6 +16,10 @@ bool valid_requirements(const SnapshotRequirements& requirements, std::string& e
         error = "unknown machine state flags";
         return false;
     }
+    if (!rxpce_video::valid_vdc_mode(requirements.vdc_mode)) {
+        error = "invalid VDC emulation mode";
+        return false;
+    }
     if (requirements.line_period <= 0 || requirements.timer_period <= 0 ||
         !requirements.frame_lines) {
         error = "invalid snapshot clocks";
@@ -41,6 +45,28 @@ bool valid_machine(const MachineSnapshot& value, const SnapshotRequirements& req
     if (std::any_of(value.palette.begin(), value.palette.end(),
                     [](auto pixel) { return pixel >= 512; })) {
         error = "invalid state palette index";
+        return false;
+    }
+    if (!valid_vdc(value.vdc, error))
+        return false;
+    const auto& c = value.vdc.config;
+    const auto& t = value.vdc.timing;
+    if (c.line_period != unsigned(requirements.line_period) ||
+        c.frame_lines != requirements.frame_lines || c.first_active != unsigned(value.io.minline) ||
+        c.last_active != unsigned(value.io.maxline) ||
+        (requirements.vdc_mode == rxpce_video::VdcMode::accurate &&
+         (t.cpu_time != value.cpu.cpu.elapsed || t.line != unsigned(value.scanline) ||
+          t.line_offset !=
+              std::uint64_t(std::int64_t(value.cpu.line_period) - value.cpu.line_remaining))) ||
+        t.requested_cr != value.io.vdc[5].value || t.requested_mwr != value.io.vdc[9].value) {
+        error = "VDC/CPU clock or register mismatch";
+        return false;
+    }
+    if (requirements.vdc_mode == rxpce_video::VdcMode::fast &&
+        (t.cpu_time || t.dots || t.line || t.line_offset || t.line_dots ||
+         value.vdc.dma.phase != rxpce_video::DmaPhase::idle ||
+         value.vdc.cpu.kind != rxpce_video::CpuVramKind::none)) {
+        error = "invalid Fast VDC inactive clock or transfer";
         return false;
     }
     if (value.io.controllers.count != requirements.controllers ||
@@ -82,6 +108,8 @@ std::vector<char> encode_machine(const MachineSnapshot& value,
     w.number(value.bank, 1);
     const auto cpu = encode_cpu(value.cpu);
     w.block(cpu.data(), cpu.size());
+    const auto vdc = encode_vdc(value.vdc);
+    w.block(vdc.data(), vdc.size());
     if (requirements.flags & 1)
         w.block(value.populous.data(), value.populous.size());
     if (w.data.size() != machine_state_bytes(requirements.flags))
@@ -119,6 +147,10 @@ bool decode_machine(const char* data, std::size_t size, const SnapshotRequiremen
             error = "invalid CPU state or clock mismatch";
             return false;
         }
+        std::array<char, vdc_state_bytes> vdc;
+        r.block(vdc.data(), vdc.size());
+        if (!decode_vdc(vdc.data(), vdc.size(), next->vdc, error))
+            return false;
         if (requirements.flags & 1)
             r.block(next->populous.data(), next->populous.size());
         if (r.remaining) {

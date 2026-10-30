@@ -1,4 +1,5 @@
 #pragma once
+#include "vdc_mode.h"
 #include <array>
 #include <atomic>
 #include <string>
@@ -37,6 +38,7 @@ struct Settings {
         std::string bios_file;
     } cd;
     struct Advanced {
+        rxpce_video::VdcMode vdc_emulation = rxpce_video::VdcMode::accurate;
         int base_clock_hz = 7170000;
         bool log = false, show_fps = false;
     } advanced;

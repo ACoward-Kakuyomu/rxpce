@@ -209,9 +209,12 @@ class Mixer {
         state_ = state;
         synth_.update(state);
     }
-    void mix(float* out, std::size_t frames) {
+    // Return missing PCM frames; silence is still supplied without advancing devices.
+    std::size_t mix(float* out, std::size_t frames) {
+        const auto available = ready_.queued() / channels_;
         if (frames)
             ready_.read(out, frames * channels_);
+        return frames > available ? frames - available : 0;
     }
 };
 } // namespace rxpce_audio

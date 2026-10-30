@@ -1,8 +1,10 @@
 #pragma once
+#include "vdc_mode.h"
 #include "io_state_codec.h"
 #include "pce_cpu_state.h"
 #include "video_frame.h"
 #include "audio_state.h"
+#include "vdc_state_codec.h"
 namespace rxpce_machine {
 class Machine;
 struct FrameSurface;
@@ -13,8 +15,8 @@ struct FrameSurface;
 namespace rxpce_state {
 namespace machine_wire {
 constexpr std::size_t ram = 0, vram = 8192, sprites = 139264, palette = 139776, scanline = 140800;
-constexpr std::size_t io = 140804, backup = 142206, bank = 144254, cpu = 144255,
-                      base_size = cpu + cpu_state_size;
+constexpr std::size_t io = 140804, backup = io + io_wire::size, bank = backup + 2048,
+                      cpu = bank + 1, vdc = cpu + cpu_state_size, base_size = vdc + vdc_state_bytes;
 } // namespace machine_wire
 struct MachineSnapshot {
     std::array<std::uint8_t, 8192> ram{};
@@ -27,9 +29,11 @@ struct MachineSnapshot {
     std::uint8_t bank = 0;
     PceCpu cpu;
     rxpce_audio::PsgPhaseState sound;
+    VdcSnapshot vdc;
     std::array<std::uint8_t, 32768> populous{};
 };
 struct SnapshotRequirements {
+    rxpce_video::VdcMode vdc_mode = rxpce_video::VdcMode::accurate;
     std::uint32_t flags = 0;
     int line_period = 1, timer_period = 1;
     unsigned frame_lines = 263, controllers = 1;

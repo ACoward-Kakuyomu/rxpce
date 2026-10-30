@@ -36,8 +36,8 @@ IDR_MAINFRAME           ICON    DISCARDABLE     "res\\rxpce.ico"
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,0
- PRODUCTVERSION 1,0,0,0
+ FILEVERSION 1,1,0,0
+ PRODUCTVERSION 1,1,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -54,12 +54,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ACoward\0"
             VALUE "FileDescription", "rxpce\0"
-            VALUE "FileVersion", "1.0.0\0"
+            VALUE "FileVersion", "1.1.0\0"
             VALUE "InternalName", "rxpce\0"
             VALUE "OriginalFilename", "rxpce.exe\0"
             VALUE "ProductName", "rxpce\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 ACoward\0"
-            VALUE "ProductVersion", "1.0.0\0"
+            VALUE "ProductVersion", "1.1.0\0"
         END
     END
     BLOCK "VarFileInfo"
@@ -119,7 +119,7 @@ CAPTION "About rxpce"
 FONT 9, "Segoe UI"
 BEGIN
     ICON            IDR_MAINFRAME,IDC_STATIC,11,12,20,20
-    LTEXT           "rxpce 1.0.0",IDC_APPVERSION,43,12,166,12
+    LTEXT           "rxpce 1.1.0",IDC_APPVERSION,43,12,166,12
     LTEXT           "Copyright (C) 2026 ACoward",IDC_APPCOPYRIGHT,43,31,166,12
     LTEXT           "xpce: hmmx",IDC_ORIGINALAUTHOR,11,58,198,10
     LTEXT           "MCS6502: Copyright (c) 2019 Ben Zotto",IDC_CPUCREDIT,11,74,198,10

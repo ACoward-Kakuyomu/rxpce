@@ -12,9 +12,9 @@
 #include "settings.h"
 #include "frame_timing.h"
 #include "archive.h"
-#include "vram_dma.h"
 #include "graphics_memory.h"
 #include "machine_runtime.h"
+#include "machine_vdc.h"
 #include "host_runtime.h"
 #include "host_settings.h"
 #include "psg_snapshot.h"
@@ -154,7 +154,7 @@ std::uint32_t CdStateFlags() {
 }
 std::wstring CdStatePath(const std::filesystem::path& folder) {
     auto& machine = CurrentMachine();
-    return rxpce_cd::state_path(machine.cd_session->source, folder.native());
+    return rxpce_cd::state_path(machine.cd_session->source, folder.native(), machine.vdc_mode);
 }
 static rxpce_cd::StateBinding CurrentCdBinding() {
     auto& machine = CurrentMachine();
@@ -298,6 +298,7 @@ void ResetPCE(PceCpu* state) {
         machine.io.psg[i][4] = 0x80;
     }
 
+    rxpce_machine::ResetMachineVdc(machine);
     ResetPceCpu(*state, machine.bus(), machine.line_period, machine.timer_period);
     if (machine.cd_session) {
         machine.cd_controller.reset(rxpce_host::runtime.base_clock_hz);
@@ -386,6 +387,7 @@ static int RunPCE(void) {
         &machine};
     host.clock = [](PceCpu& cpu, void* context) {
         auto& machine = *static_cast<Machine*>(context);
+        rxpce_machine::AdvanceMachineVdc(machine, cpu.device_time);
         if (machine.cd_session) {
             machine.cd_controller.advance(cpu.device_time);
             machine.io.irq_status =
@@ -446,6 +448,9 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file) {
     bool core_started = false;
     try {
         auto& machine = CurrentMachine();
+        machine.vdc_mode = rxpce_host::runtime.vdc_emulation;
+        LogDumpDetail("VDC emulation=%s\n",
+                      machine.vdc_mode == rxpce_video::VdcMode::fast ? "fast" : "accurate");
         machine.line_period = rxpce_host::runtime.base_clock_hz / (machine.frame_lines * 60);
         LogDumpDetail("Emulation clock=%d period=%d\n", rxpce_host::runtime.base_clock_hz,
                       machine.line_period);

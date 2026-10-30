@@ -8,9 +8,9 @@ namespace rxpce_state {
 namespace io_wire {
 constexpr std::size_t vdc = 0, vce = 64, palette_address = 1088, vdc_increment = 1090,
                       vdc_index = 1092;
-constexpr std::size_t dimensions = 1097, controllers = 1121, psg = 1145, wave = 1193,
-                      wave_offsets = 1385;
-constexpr std::size_t psg_channel = 1391, timer = 1395, irq = 1398, backup = 1400, size = 1402;
+constexpr std::size_t dimensions = 1096, controllers = 1120, psg = 1144, wave = 1192,
+                      wave_offsets = 1384;
+constexpr std::size_t psg_channel = 1390, timer = 1394, irq = 1397, backup = 1399, size = 1401;
 } // namespace io_wire
 bool valid_io(const rxpce_machine::IoState&, std::string& error);
 std::vector<char> encode_io(const rxpce_machine::IoState&);

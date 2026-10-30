@@ -33,8 +33,10 @@ void ShutdownFrameTiming() {
     }
     ResetFrameTiming();
 }
-void InitializeFrameTiming() {
+void InitializeFrameTiming(unsigned frame_cycles, unsigned clock_hz) {
     ShutdownFrameTiming();
+    scheduler.set_frame_clock(frame_cycles, clock_hz);
+    LogDumpDetail("Frame clock: cycles=%u base=%u\n", frame_cycles, clock_hz);
     timer.reset(CreateWaitableTimerEx(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                                       TIMER_MODIFY_STATE | SYNCHRONIZE));
     if (!timer)

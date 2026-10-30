@@ -117,7 +117,7 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 | D3D11 device | 初期値は`Automatic (hardware / WARP fallback)`。描画の問題を切り分ける場合は`WARP (software)`でも確認できます |
 | Window scale | 1～4倍。OK時に反映。全画面中はウィンドウへ戻る際の倍率として保持 |
 | Aspect ratio | Square Pixels（既定）／TV (4:3)。OK時に反映 |
-| Automatic frame skip (60 Hz) | 初期値は有効。60 Hzを目標に速度を制御し、処理が間に合わないときに描画を追加スキップ |
+| Automatic frame skip (60 Hz) | 初期値は有効。約60 Hzを目標に速度を制御し、処理が間に合わないときに描画を追加スキップ |
 | Frame skip (0-15) | 次に描画するまでにスキップする枚数。自動時は最低スキップ枚数、非自動時は固定枚数 |
 | Palette file (empty = linear RGB) | 外部パレット。512色×RGB各1バイト、1536バイト。未指定・サイズ不正・読込み失敗では標準RGBを使用 |
 
@@ -159,15 +159,20 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 | 項目 | 内容 |
 | --- | --- |
 | Base clock (Hz) | 初期値7,170,000。通常は変更しません。範囲1,000,000～85,920,000、1000 Hz単位に切捨て |
+| VDC emulation | `Accurate`（既定）は段階DMA・CPU競合待ちを再現。`Fast`は一括転送と簡略タイミングで速度を優先。次回エミュレーション開始時に反映 |
 | Enable diagnostic log | 詳細ログを有効化。初期値は無効 |
 | Show FPS | FPS表示。初期値は無効。実行中はF7でも変更可能 |
 | XInput support／DirectInput support | パッド入力方式の有効／無効。初期値はXInputのみ有効 |
+
+VDC emulationは処理負荷とタイミングモデルの選択です。FastでもAutomatic frame skipが有効なら通常速度（約60 Hz）を維持します。ゲームの表示や動作に差がある場合はAccurateを選び、ゲームを開き直してください。
+
+通常速度の待機周期は仮想フレームのCPUクロック数とBase clockから計算します。初期設定では約60.049 Hzです。固定60 Hzとの差を補正し、長時間再生で音声が徐々に不足することを防ぎます。
 
 Base clockはCPUと各機器の進行に関係する設定です。ホストPCの性能を上げるための項目ではありません。
 
 ### 7. 保存・復帰とファイルの場所
 
-ステートは**1スロット**です。F5は上書き、F6は復帰です。ゲームを開いて実行可能な状態にしてから操作します。再起動後も同じゲームを開いてF6で復帰できます。
+ステートは**VDCモードごとに1スロット**です。F5は上書き、F6は復帰です。ゲームを開いて実行可能な状態にしてから操作します。再起動後も同じゲームを開いてF6で復帰できます。
 
 | ファイル | 内容 | 保存先／名前 |
 | --- | --- | --- |
@@ -175,6 +180,7 @@ Base clockはCPUと各機器の進行に関係する設定です。ホストPC�
 | backup.dat | 全ゲーム共通のバックアップRAM（2 KiB） | 実行ファイルの隣 |
 | HuCard／ZIP／CUEのステート | 実行状態 | `Example.pce`／`Example.zip`／`Example.cue` → `Example.st0` |
 | CHDのステート | 実行状態 | `Example.chd` → `Example.chd.st0` |
+| Fastのステート | 速度優先モードの実行状態 | `.st0`の代わりに`.fst0`。CHDは`Example.chd.fst0` |
 | Populous RAM | カートリッジRAM（32 KiB） | `Example.pce`／`Example.zip` → `Example.ram` |
 | rxpce.log／rxpce.log.bak | 診断ログ／前回のログ | 実行ファイルの隣 |
 
@@ -184,13 +190,15 @@ Base clockはCPUと各機器の進行に関係する設定です。ホストPC�
 
 **F6による復帰は、共有バックアップRAMとPopulous RAMも保存時点へ戻します。** その後に停止・終了すると、戻った内容が永続ファイルに保存されます。共有RAMには他のゲームのセーブも含まれます。新しいセーブを残す場合は、先に正常終了して保存ファイルをバックアップしてください。
 
+AccurateとFastは別々のステートを保存し、相互に復帰できません。ファイル名を変更しても形式GUIDで拒否します。実行中にVDC emulationを変更しても、現在のモードと保存先は次回開始まで変わりません。`backup.dat`と`.ram`のゲーム内セーブは両モードで共通です。
+
 CDの復帰には同じBIOS・同じディスク・同じ構成が必要です。プレイヤー数、2／6ボタン、Base clockなどを変えると復帰を拒否する場合があります。ファイル名を変えて別のゲームやCUE/CHDへ流用しないでください。旧xpceや形式の異なる開発版ステートの移行は行いません。
 
 ### 8. 更新・設定の初期化
 
-転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。LFO・ノイズの内部カウンター保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
+転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
-更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
+更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.fst0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
 
 設定だけを初期化する場合は、終了後に`rxpce.json`を別名で退避して起動します。正常終了時に新しい設定ファイルを保存します。ゲーム内セーブを残す場合は`backup.dat`や`.ram`を削除しないでください。旧`xpce.ini`／`xpce.json`は自動読込みしません。
 
@@ -329,7 +337,7 @@ XInput displays slot and connection status, such as `XInput 1 (Connected)`, rath
 | D3D11 device | Defaults to `Automatic (hardware / WARP fallback)`. Try `WARP (software)` when diagnosing rendering issues |
 | Window scale | 1×–4×; applies on OK. In fullscreen, this is the scale retained for returning to a window |
 | Aspect ratio | Square Pixels (default) / TV (4:3); applies on OK |
-| Automatic frame skip (60 Hz) | Enabled by default; targets 60 Hz and skips additional rendering when behind |
+| Automatic frame skip (60 Hz) | Enabled by default; targets approximately 60 Hz and skips additional rendering when behind |
 | Frame skip (0-15) | Frames skipped before the next rendered frame. A minimum in automatic mode, a fixed count otherwise |
 | Palette file (empty = linear RGB) | External palette: 512 RGB entries, 1536 bytes. Empty, invalid-size or unreadable files use standard RGB |
 
@@ -371,15 +379,20 @@ Other relative folder paths use the process working directory. Use a writable ab
 | Setting | Description |
 | --- | --- |
 | Base clock (Hz) | Default 7,170,000; normally leave unchanged. Range 1,000,000–85,920,000, rounded down to 1000 Hz units |
+| VDC emulation | `Accurate` (default) uses progressive DMA and CPU contention waits. `Fast` prioritizes speed with bulk transfers and simplified timing. Applied on the next emulation start |
 | Enable diagnostic log | Enable detailed logging; disabled by default |
 | Show FPS | FPS display; disabled by default. F7 changes it during play |
 | XInput support / DirectInput support | Enable input backends; only XInput is enabled by default |
+
+VDC emulation selects processing cost and timing behavior. Fast still runs at the normal speed (approximately 60 Hz) when Automatic frame skip is enabled. If a game shows display or behavior differences, select Accurate and reopen the game.
+
+Normal-speed pacing follows the CPU clocks per emulated frame and Base clock, approximately 60.049 Hz at defaults. This corrects the small difference from a fixed 60 Hz limit so audio does not gradually run short during playback.
 
 Base clock controls emulated CPU/device timing. It is not a host-PC performance tuning setting.
 
 ### 7. Save states and file locations
 
-There is **one save-state slot**. F5 overwrites it; F6 restores it. Open the game and let emulation start before using these commands. After restarting the application, reopen the same game and press F6.
+There is **one save-state slot per VDC mode**. F5 overwrites it; F6 restores it. Open the game and let emulation start before using these commands. After restarting the application, reopen the same game and press F6.
 
 | File | Contents | Location/name |
 | --- | --- | --- |
@@ -387,6 +400,7 @@ There is **one save-state slot**. F5 overwrites it; F6 restores it. Open the gam
 | backup.dat | Shared 2 KiB game-save RAM | Beside the executable |
 | HuCard/ZIP/CUE state | Emulation state | `Example.pce` / `Example.zip` / `Example.cue` → `Example.st0` |
 | CHD state | Emulation state | `Example.chd` → `Example.chd.st0` |
+| Fast state | Speed-priority emulation state | Uses `.fst0` instead of `.st0`; CHD uses `Example.chd.fst0` |
 | Populous RAM | 32 KiB cartridge RAM | `Example.pce` / `Example.zip` → `Example.ram` |
 | rxpce.log / rxpce.log.bak | Diagnostic / previous log | Beside the executable |
 
@@ -396,13 +410,15 @@ Game saves and save states are separate features. Game-save RAM is written to di
 
 **F6 also rolls shared backup RAM and Populous RAM back to the saved point.** Stopping or exiting afterward writes the rolled-back data to disk. Shared backup RAM may include other games' saves. To preserve newer saves, exit normally and back up the files first.
 
+Accurate and Fast keep separate states and cannot load each other's states. Renaming a file does not bypass its format GUID. Changing VDC emulation during play leaves the active mode and save path unchanged until the next emulation start. In-game saves in `backup.dat` and `.ram` are shared between both modes.
+
 CD restoration requires the same BIOS, disc and configuration. Changing player count, 2/6-button modes or Base clock can cause a state to be rejected. Do not rename a state to reuse it with another game or image format. Old xpce states and development states with different formats are not migrated.
 
 ### 8. Updating and resetting settings
 
-Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store LFO and noise counters. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
+Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 
-Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
+Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
 
 To reset settings only, close the app, rename `rxpce.json` as a backup and restart. New settings are saved on normal exit. Keep `backup.dat` and `.ram` files if you want to retain game saves. Old `xpce.ini`/`xpce.json` files are not imported automatically.
 

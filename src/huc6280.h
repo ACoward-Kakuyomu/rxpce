@@ -31,6 +31,9 @@ struct Bus {
     void* context;
     // Optional extra CPU clocks for a physical access, e.g. VDC/VCE waits.
     unsigned (*wait)(std::uint32_t physical, bool write, void* context) = nullptr;
+    // Optional elapsed-prefix synchronization and additional readiness waits.
+    void (*synchronize)(std::uint64_t time, void* context) = nullptr;
+    unsigned (*ready)(std::uint32_t physical, bool write, void* context) = nullptr;
 };
 struct StepResult {
     unsigned cycles;  // CPU clocks, including bus waits
@@ -64,6 +67,10 @@ class HuC6280 {
     MCS6502ExecutionContext base_{};
     unsigned waits_ = 0;
     int cached_opcode_ = -1, injected_operand_ = -1;
+    std::uint64_t instruction_time_ = 0;
+    unsigned instruction_divisor_ = 1;
+    bool in_step_ = false;
+    void bus_wait(std::uint32_t, bool);
     static std::uint8_t read_base(std::uint16_t, void*);
     static void write_base(std::uint16_t, std::uint8_t, void*);
     std::uint32_t physical(std::uint16_t) const;

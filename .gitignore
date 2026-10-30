@@ -4,6 +4,8 @@
 # Local ROMs and other private test data
 /.data/
 *.ram
+*.st0
+*.fst0
 
 # Legacy Visual C++ generated workspace/resource caches
 *.aps

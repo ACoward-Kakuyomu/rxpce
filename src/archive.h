@@ -1,4 +1,5 @@
 #pragma once
+#include "vdc_mode.h"
 #include "cartridge.h"
 #include <cstddef>
 #include <string>
@@ -14,7 +15,8 @@ struct Cartridge {
 };
 bool load(const std::filesystem::path& path, Cartridge& result, std::string& error);
 std::filesystem::path state_path(const std::filesystem::path& source,
-                                 const std::filesystem::path& folder);
+                                 const std::filesystem::path& folder,
+                                 rxpce_video::VdcMode mode = rxpce_video::VdcMode::accurate);
 std::filesystem::path ram_path(const std::filesystem::path& source,
                                const std::filesystem::path& folder);
 void queue(Cartridge image);

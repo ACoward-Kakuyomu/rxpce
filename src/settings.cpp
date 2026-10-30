@@ -149,6 +149,8 @@ bool validate(const Settings& s, std::string& error) {
     try {
         require(s.audio.backend == "directsound" || s.audio.backend == "wasapi",
                 "Invalid audio backend");
+        require(rxpce_video::valid_vdc_mode(s.advanced.vdc_emulation),
+                "Invalid VDC emulation mode");
         require(rxpce_video::valid_aspect_mode(s.video.aspect_mode), "Invalid aspect ratio");
         require(s.video.adapter >= -2 && s.video.zoom >= 1 && s.video.zoom <= 4 &&
                     s.video.frame_skip >= 0 && s.video.frame_skip <= 15,
@@ -258,6 +260,11 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         const auto& cd = object(field(r, "cd"));
         read(cd, "bios_file", s.cd.bios_file);
         const auto& x = object(field(r, "advanced"));
+        std::string vdc_mode = "accurate";
+        read(x, "vdc_emulation", vdc_mode);
+        require(vdc_mode == "accurate" || vdc_mode == "fast", "Invalid VDC emulation mode");
+        s.advanced.vdc_emulation =
+            vdc_mode == "fast" ? rxpce_video::VdcMode::fast : rxpce_video::VdcMode::accurate;
         read(x, "base_clock_hz", s.advanced.base_clock_hz);
         read(x, "log", s.advanced.log);
         read(x, "show_fps", s.advanced.show_fps);
@@ -306,6 +313,8 @@ std::string encode(const Settings& s) {
     f["state"] = val(s.folders.state);
     cd["bios_file"] = val(s.cd.bios_file);
     r["cd"] = picojson::value(cd);
+    x["vdc_emulation"] = val(
+        std::string(s.advanced.vdc_emulation == rxpce_video::VdcMode::fast ? "fast" : "accurate"));
     x["base_clock_hz"] = val(s.advanced.base_clock_hz - s.advanced.base_clock_hz % 1000);
     x["log"] = val(s.advanced.log);
     x["show_fps"] = val(s.advanced.show_fps);

@@ -1,4 +1,5 @@
 #pragma once
+#include "vdc_mode.h"
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -9,18 +10,29 @@
 namespace rxpce_state {
 inline constexpr std::size_t header_size = 32;
 // UUID bytes in printed order, independent of native GUID struct layout.
-// HuCard: 0e1b29fa-bc9a-4b0e-a81e-631cf8a6c03b
+// HuCard: 9698e33d-8052-4041-81fc-ccaa82143a3a
 inline constexpr std::array<unsigned char, 16> hucard_format = {
-    0x0e, 0x1b, 0x29, 0xfa, 0xbc, 0x9a, 0x4b, 0x0e, 0xa8, 0x1e, 0x63, 0x1c, 0xf8, 0xa6, 0xc0, 0x3b};
-// CD: 6d6806cc-3612-437a-92da-7046432e6cc7
+    0x96, 0x98, 0xe3, 0x3d, 0x80, 0x52, 0x40, 0x41, 0x81, 0xfc, 0xcc, 0xaa, 0x82, 0x14, 0x3a, 0x3a};
+// CD: a73c94c9-f079-4f69-8397-26bf71ac770b
 inline constexpr std::array<unsigned char, 16> cd_format = {
-    0x6d, 0x68, 0x06, 0xcc, 0x36, 0x12, 0x43, 0x7a, 0x92, 0xda, 0x70, 0x46, 0x43, 0x2e, 0x6c, 0xc7};
-inline std::vector<char> header(std::size_t size, std::uint32_t flags) {
+    0xa7, 0x3c, 0x94, 0xc9, 0xf0, 0x79, 0x4f, 0x69, 0x83, 0x97, 0x26, 0xbf, 0x71, 0xac, 0x77, 0x0b};
+// Fast modes have independent identities even though the outer layout is shared.
+// fast_hucard_format: 78555b63-da2a-4aec-bb4c-1ea45da2b277
+inline constexpr std::array<unsigned char, 16> fast_hucard_format = {
+    0x78, 0x55, 0x5b, 0x63, 0xda, 0x2a, 0x4a, 0xec, 0xbb, 0x4c, 0x1e, 0xa4, 0x5d, 0xa2, 0xb2, 0x77};
+// fast_cd_format: 3b899a45-3bc2-4fab-8115-f30264227289
+inline constexpr std::array<unsigned char, 16> fast_cd_format = {
+    0x3b, 0x89, 0x9a, 0x45, 0x3b, 0xc2, 0x4f, 0xab, 0x81, 0x15, 0xf3, 0x02, 0x64, 0x22, 0x72, 0x89};
+inline std::vector<char> header(std::size_t size, std::uint32_t flags,
+                                rxpce_video::VdcMode mode = rxpce_video::VdcMode::accurate) {
     std::vector<char> bytes(header_size, 0);
     const char magic[] = "RXPCEST";
     for (unsigned i = 0; i < 8; ++i)
         bytes[i] = magic[i];
-    const auto& format = flags == 0x100 || flags == 0x200 ? cd_format : hucard_format;
+    const bool cd = flags == 0x100 || flags == 0x200;
+    const auto& format = mode == rxpce_video::VdcMode::fast
+                             ? (cd ? fast_cd_format : fast_hucard_format)
+                             : (cd ? cd_format : hucard_format);
     for (unsigned i = 0; i < format.size(); ++i)
         bytes[8 + i] = static_cast<char>(format[i]);
     for (unsigned i = 0; i < 4; ++i) {
@@ -29,19 +41,21 @@ inline std::vector<char> header(std::size_t size, std::uint32_t flags) {
     }
     return bytes;
 }
-inline bool write(std::ostream& stream, const std::vector<char>& payload, std::uint32_t flags) {
+inline bool write(std::ostream& stream, const std::vector<char>& payload, std::uint32_t flags,
+                  rxpce_video::VdcMode mode = rxpce_video::VdcMode::accurate) {
     if (payload.size() > std::numeric_limits<std::uint32_t>::max())
         return false;
-    const auto prefix = header(payload.size(), flags);
+    const auto prefix = header(payload.size(), flags, mode);
     stream.write(prefix.data(), prefix.size());
     stream.write(payload.data(), payload.size());
     return static_cast<bool>(stream);
 }
 inline bool read(std::istream& stream, std::size_t size, std::uint32_t flags,
-                 std::vector<char>& payload) {
+                 std::vector<char>& payload,
+                 rxpce_video::VdcMode mode = rxpce_video::VdcMode::accurate) {
     if (size > std::numeric_limits<std::uint32_t>::max())
         return false;
-    const auto expected = header(size, flags);
+    const auto expected = header(size, flags, mode);
     std::vector<char> prefix(header_size);
     if (!stream.read(prefix.data(), prefix.size()) || prefix != expected)
         return false;

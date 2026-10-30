@@ -17,7 +17,7 @@ bool valid_io(const rxpce_machine::IoState& io, std::string& error) {
         return reject("invalid video register index");
     if (io.vdc_inc != 1 && io.vdc_inc != 32 && io.vdc_inc != 64 && io.vdc_inc != 128)
         return reject("invalid VRAM increment");
-    if (io.vdc_satb > 1 || io.vdc_pendvsync > 1)
+    if (io.vdc_pendvsync > 1)
         return reject("invalid VDC pending state");
     if (io.screen_w < 8 || io.screen_w > 512 || io.screen_w % 8 || io.screen_h < 1 ||
         io.screen_h > 256 || io.minline < 0 || io.maxline >= 256 || io.maxline < io.minline)
@@ -53,7 +53,7 @@ std::vector<char> encode_io(const rxpce_machine::IoState& io) {
         w.number(value.value, 2);
     w.number(io.vce_reg.value, 2);
     w.number(io.vdc_inc, 2);
-    for (auto value : {io.vdc_reg, io.vdc_status, io.vdc_ratch, io.vdc_satb, io.vdc_pendvsync})
+    for (auto value : {io.vdc_reg, io.vdc_status, io.vdc_ratch, io.vdc_pendvsync})
         w.number(value, 1);
     for (auto value : {io.bg_h, io.bg_w, io.screen_w, io.screen_h, io.minline, io.maxline})
         w.number(static_cast<std::uint32_t>(value), 4);
@@ -95,7 +95,6 @@ bool decode_io(const char* data, std::size_t size, rxpce_machine::IoState& outpu
         next.vdc_reg = byte();
         next.vdc_status = byte();
         next.vdc_ratch = byte();
-        next.vdc_satb = byte();
         next.vdc_pendvsync = byte();
         next.bg_h = static_cast<std::int32_t>(r.signed_number(4));
         next.bg_w = static_cast<std::int32_t>(r.signed_number(4));

@@ -1,20 +1,37 @@
 #include "machine.h"
+#include "machine_vdc.h"
 #include <stdexcept>
 #include <utility>
 
 namespace rxpce_machine {
 Machine::~Machine() = default;
 rxpce_cpu::Bus Machine::bus() noexcept {
-    return {[](std::uint32_t address, void* context) {
-                return static_cast<Machine*>(context)->read(address);
-            },
-            [](std::uint32_t address, std::uint8_t value, void* context) {
-                static_cast<Machine*>(context)->write(address, value);
-            },
-            this,
-            [](std::uint32_t address, bool, void*) -> unsigned {
-                return (address & 0x1ff800) == 0x1fe000 ? 1 : 0;
-            }};
+    rxpce_cpu::Bus result{[](std::uint32_t address, void* context) {
+                              return static_cast<Machine*>(context)->read(address);
+                          },
+                          [](std::uint32_t address, std::uint8_t value, void* context) {
+                              static_cast<Machine*>(context)->write(address, value);
+                          },
+                          this,
+                          [](std::uint32_t address, bool, void*) -> unsigned {
+                              return (address & 0x1ff800) == 0x1fe000 ? 1 : 0;
+                          },
+                          [](std::uint64_t time, void* context) {
+                              auto& machine = *static_cast<Machine*>(context);
+                              // The common scheduler has usually synchronized this timestamp
+                              // already. Keep I/O's explicit synchronization for register writes.
+                              if (time != machine.vdc.clock.state().cpu_time)
+                                  AdvanceMachineVdc(machine, time);
+                          },
+                          [](std::uint32_t address, bool write, void* context) {
+                              return MachineVdcReady(*static_cast<Machine*>(context), address,
+                                                     write);
+                          }};
+    if (vdc_mode == rxpce_video::VdcMode::fast) {
+        result.synchronize = nullptr;
+        result.ready = nullptr;
+    }
+    return result;
 }
 void Machine::map_rom() noexcept {
     rom_map_.fill(nullptr);

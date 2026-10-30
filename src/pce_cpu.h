@@ -29,4 +29,6 @@ void ResetPceCpu(PceCpu&, rxpce_cpu::Bus, int line_period, int timer_period);
 // cpu.elapsed is already the end time; callbacks must not replace CPU state.
 // Host reset/load operations belong to safe_point after all debt is drained.
 void AdvancePceCpuDevices(PceCpu&, unsigned elapsed, const PceCpuHost&);
+// Synchronize an elapsed prefix inside a bus wait. CPU elapsed already includes that prefix.
+void SynchronizePceCpuDevices(PceCpu&, std::uint64_t target, const PceCpuHost&);
 PceCpuResult RunPceCpu(PceCpu&, const PceCpuHost&);

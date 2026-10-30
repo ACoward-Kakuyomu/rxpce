@@ -1,5 +1,6 @@
 #include "pce_cpu.h"
 #include <cassert>
+#include <algorithm>
 #include <limits>
 void ResetPceCpu(PceCpu& state, rxpce_cpu::Bus bus, int line, int timer) {
     assert(line > 0 && timer > 0);
@@ -15,29 +16,65 @@ void AdvancePceCpuDevices(PceCpu& state, unsigned elapsed, const PceCpuHost& hos
     assert(state.line_period > 0 && state.timer_period > 0 && state.line_remaining > 0 &&
            state.timer_remaining > 0 && elapsed <= unsigned(std::numeric_limits<int>::max()) &&
            state.cpu.elapsed >= elapsed);
-    state.line_remaining -= static_cast<int>(elapsed);
-    state.timer_remaining -= static_cast<int>(elapsed);
-    auto sync = [&](std::uint64_t time) {
-        state.device_time = time;
+    const auto start = state.cpu.elapsed - elapsed;
+    if (state.device_time < start)
+        state.device_time = start;
+    SynchronizePceCpuDevices(state, state.cpu.elapsed, host);
+}
+void SynchronizePceCpuDevices(PceCpu& state, std::uint64_t target, const PceCpuHost& host) {
+    assert(state.line_period > 0 && state.timer_period > 0 && state.line_remaining > 0 &&
+           state.timer_remaining > 0 && state.device_time <= target && target <= state.cpu.elapsed);
+    while (state.device_time < target || state.line_remaining == 0 || state.timer_remaining == 0) {
+        const auto delta = std::min<std::uint64_t>(
+            target - state.device_time,
+            static_cast<unsigned>(std::min(state.line_remaining, state.timer_remaining)));
+        state.line_remaining -= static_cast<int>(delta);
+        state.timer_remaining -= static_cast<int>(delta);
+        state.device_time += delta;
         if (host.clock)
             host.clock(state, host.context);
-    };
-    while (state.timer_remaining <= 0 || state.line_remaining <= 0) {
-        const bool timer = state.timer_remaining <= state.line_remaining;
-        const auto debt = timer ? state.timer_remaining : state.line_remaining;
-        sync(state.cpu.elapsed - static_cast<std::uint64_t>(-std::int64_t(debt)));
-        if (timer) {
-            state.timer_remaining += state.timer_period;
+        if (state.timer_remaining == 0) {
+            state.timer_remaining = state.timer_period;
             host.timer(state, host.context);
-        } else {
-            state.line_remaining += state.line_period;
+        } else if (state.line_remaining == 0) {
+            state.line_remaining = state.line_period;
             host.scanline(state, host.context);
         }
     }
-    sync(state.cpu.elapsed);
 }
 PceCpuResult RunPceCpu(PceCpu& state, const PceCpuHost& host) {
-    rxpce_cpu::HuC6280 cpu(host.bus, state.cpu);
+    struct Access {
+        PceCpu& cpu;
+        const PceCpuHost& host;
+    } access{state, host};
+    auto bus = host.bus;
+    if (bus.synchronize || bus.ready) {
+        bus = {[](std::uint32_t a, void* p) {
+                   auto& x = *static_cast<Access*>(p);
+                   return x.host.bus.read(a, x.host.bus.context);
+               },
+               [](std::uint32_t a, std::uint8_t v, void* p) {
+                   auto& x = *static_cast<Access*>(p);
+                   x.host.bus.write(a, v, x.host.bus.context);
+               },
+               &access,
+               [](std::uint32_t a, bool w, void* p) -> unsigned {
+                   auto& x = *static_cast<Access*>(p);
+                   return x.host.bus.wait ? x.host.bus.wait(a, w, x.host.bus.context) : 0;
+               },
+               [](std::uint64_t t, void* p) {
+                   auto& x = *static_cast<Access*>(p);
+                   if (t > x.cpu.device_time)
+                       SynchronizePceCpuDevices(x.cpu, t, x.host);
+                   if (x.host.bus.synchronize)
+                       x.host.bus.synchronize(t, x.host.bus.context);
+               },
+               [](std::uint32_t a, bool w, void* p) -> unsigned {
+                   auto& x = *static_cast<Access*>(p);
+                   return x.host.bus.ready ? x.host.bus.ready(a, w, x.host.bus.context) : 0;
+               }};
+    }
+    rxpce_cpu::HuC6280 cpu(bus, state.cpu);
     bool clock_ready = false;
     for (;;) {
         if (host.stop(host.context))

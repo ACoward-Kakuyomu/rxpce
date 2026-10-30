@@ -5,6 +5,7 @@
 #include "wasapi.h"
 #include <string>
 #include "audio_mixer.h"
+#include "log.h"
 #include <mutex>
 
 namespace {
@@ -14,6 +15,7 @@ rxpce_audio::Mixer mixer;
 rxpce_audio::OutputSettings active_settings;
 HWND output_window = nullptr;
 unsigned output_channels = 2;
+std::uint64_t requested_frames = 0, missing_frames = 0, missing_events = 0;
 
 } // namespace
 
@@ -44,6 +46,7 @@ static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
             mixer.restore_phase(phase->voices);
             mixer.restore_clock(phase->rate, phase->base_clock, phase->remainder);
         }
+        requested_frames = missing_frames = missing_events = 0;
         emulating = true;
         initialized = settings.enabled;
     } catch (const std::exception&) {
@@ -122,6 +125,14 @@ void SyncSoundCycles(std::uint32_t cycles) {
     std::lock_guard<std::mutex> lock(sound_mutex);
     if (emulating)
         mixer.sync(cycles);
+    // Report from the emulation thread, never from the real-time output callback.
+    if (requested_frames >= std::uint64_t(active_settings.sample_rate) * 2) {
+        LogDumpDetail("Audio queue: requested=%llu missing=%llu events=%llu frames\n",
+                      static_cast<unsigned long long>(requested_frames),
+                      static_cast<unsigned long long>(missing_frames),
+                      static_cast<unsigned long long>(missing_events));
+        requested_frames = missing_frames = missing_events = 0;
+    }
 }
 
 void ResetSound(std::uint32_t cycles, const rxpce_audio::PsgState& state) {
@@ -134,9 +145,13 @@ void ReadMixedAudio(float* output, std::size_t frames) {
     if (!frames)
         return;
     std::lock_guard<std::mutex> lock(sound_mutex);
-    if (initialized)
-        mixer.mix(output, frames);
-    else
+    if (initialized) {
+        const auto missing = mixer.mix(output, frames);
+        requested_frames += frames;
+        missing_frames += missing;
+        missing_events += missing != 0;
+
+    } else
         std::fill_n(output, frames * output_channels, 0.0f);
 }
 #endif // SOUND

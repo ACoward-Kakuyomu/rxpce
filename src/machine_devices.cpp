@@ -2,8 +2,8 @@
 // Portable PC-Engine Emulator, 1998 BERO; modified 1998 hmmx.
 #include "machine_devices.h"
 #include "machine.h"
+#include "machine_vdc.h"
 #include "vdc_registers.h"
-#include "vram_dma.h"
 #include <algorithm>
 #include <cstdarg>
 
@@ -93,6 +93,7 @@ DisplayRectangle VisibleRectangle(const Machine& machine) {
             last - first + 1};
 }
 void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, std::uint8_t V) {
+    AdvanceMachineVdc(machine, machine.cpu.cpu.elapsed);
 
     switch (A & 0x1C00) {
     case 0x0000: /* VDC */
@@ -154,6 +155,10 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
                 PRINT_VDC_L(DCR);
             }
             machine.io.vdc[machine.io.vdc_reg].set_low(V);
+            if (machine.io.vdc_reg == CR)
+                machine.vdc.clock.write_cr(machine.io.vdc[CR].value);
+            if (machine.io.vdc_reg == MWR)
+                machine.vdc.clock.write_mwr(machine.io.vdc[MWR].value);
 
             if (machine.io.vdc_reg > 19) {
                 TRACE("ignore write lo vdc%d,%02x\n", machine.io.vdc_reg, V);
@@ -163,13 +168,21 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
 
             switch (machine.io.vdc_reg) {
             case VWR:
-
-                machine.graphics.vram()[machine.io.vdc[MAWR].value * 2] = machine.io.vdc_ratch;
-                machine.graphics.vram()[machine.io.vdc[MAWR].value * 2 + 1] = V;
-
-                machine.graphics.background_dirty()[machine.io.vdc[MAWR].value / 16] = 1;
-                machine.graphics.sprite_dirty()[machine.io.vdc[MAWR].value / 64] = 1;
-                machine.io.vdc[MAWR].value += machine.io.vdc_inc;
+                if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
+                    WriteVramDirect(
+                        machine, machine.io.vdc[MAWR].value,
+                        static_cast<std::uint16_t>(machine.io.vdc_ratch | (unsigned(V) << 8)));
+                    machine.io.vdc[MAWR].value += machine.io.vdc_inc;
+                    return;
+                }
+                QueueVramWrite(
+                    machine, machine.io.vdc[MAWR].value,
+                    static_cast<std::uint16_t>(machine.io.vdc_ratch | (unsigned(V) << 8)));
+                return;
+            case MARR:
+                machine.io.vdc[MARR].set_high(V);
+                if (machine.vdc_mode == rxpce_video::VdcMode::accurate)
+                    QueueVramRead(machine, machine.io.vdc[MARR].value);
                 return;
             case VDW:
 
@@ -181,16 +194,13 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             case LENR:
 
                 machine.io.vdc[LENR].set_high(V);
-                /* machine.graphics.vram() to machine.graphics.vram() DMA: overlapping words are transferred in order. */
-                rxpce_video::transfer_vram(machine.graphics.vram(),
-                                           machine.graphics.background_dirty(),
-                                           machine.graphics.sprite_dirty(),
-                                           machine.io.vdc[SOUR].value, machine.io.vdc[DISTR].value,
-                                           machine.io.vdc[LENR].value, machine.io.vdc[DCR].value);
-                if ((machine.io.vdc[DCR].value & 0x02)) {
-                    machine.io.vdc_status |= VDC_DMAfinish;
-                    machine.io.irq_status |= IRQ1;
+                if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
+                    TransferFastVram(machine);
+                    return;
                 }
+                machine.vdc.dma.request_vram(machine.io.vdc[SOUR].value,
+                                             machine.io.vdc[DISTR].value,
+                                             machine.io.vdc[LENR].value, machine.io.vdc[DCR].value);
                 return;
             case CR: {
                 static constexpr byte incsize[] = {1, 32, 64, 128};
@@ -218,8 +228,7 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             case SATB:
                 machine.io.vdc[SATB].set_high(V);
 
-                machine.io.vdc_satb = 1;
-                machine.io.vdc_status &= ~VDC_SATBfinish;
+                machine.vdc.dma.request_satb(machine.io.vdc[SATB].value);
                 return;
             case BXR:
                 if (!machine.video.scroll_changed) {
@@ -242,6 +251,10 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             }
 
             machine.io.vdc[machine.io.vdc_reg].set_high(V);
+            if (machine.io.vdc_reg == CR)
+                machine.vdc.clock.write_cr(machine.io.vdc[CR].value);
+            if (machine.io.vdc_reg == MWR)
+                machine.vdc.clock.write_mwr(machine.io.vdc[MWR].value);
 
             if (machine.io.vdc_reg > 19) {
                 TRACE("ignore write hi vdc%d,%02x\n", machine.io.vdc_reg, V);
@@ -252,8 +265,8 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
 
     case 0x0400: /* VCE */
         switch (A & 7) {
-        case 0: /*??*/
-            TRACE("VCE 0, V=%X\n", V);
+        case 0:
+            machine.vdc.clock.write_vce(V);
             return;
         case 2:
             machine.io.vce_reg.set_low(V);
@@ -388,13 +401,16 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
 
 /* read */
 std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A) {
+    AdvanceMachineVdc(machine, machine.cpu.cpu.elapsed);
     byte ret;
 
     switch (A & 0x1C00) {
     case 0x0000: /* VDC */
         switch (A & 3) {
         case 0:
-            ret = machine.io.vdc_status;
+            ret = static_cast<byte>(
+                (machine.io.vdc_status & ~0x40) |
+                (machine.vdc.cpu.kind != rxpce_video::CpuVramKind::none ? 0x40 : 0));
             machine.io.irq_status &= ~IRQ1;
             machine.io.vdc_status = 0;
             return ret;
@@ -402,13 +418,20 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
             return 0;
         case 2:
             if (machine.io.vdc_reg == VRR)
-                return machine.graphics.vram()[machine.io.vdc[MARR].value * 2];
+                return static_cast<byte>(machine.vdc_mode == rxpce_video::VdcMode::fast
+                                             ? ReadVramDirect(machine, machine.io.vdc[MARR].value)
+                                             : machine.vdc.cpu.read_buffer);
             else
                 return machine.io.vdc[machine.io.vdc_reg].low();
         case 3:
             if (machine.io.vdc_reg == VRR) {
-                ret = machine.graphics.vram()[machine.io.vdc[MARR].value * 2 + 1];
+                ret = static_cast<byte>((machine.vdc_mode == rxpce_video::VdcMode::fast
+                                             ? ReadVramDirect(machine, machine.io.vdc[MARR].value)
+                                             : machine.vdc.cpu.read_buffer) >>
+                                        8);
                 machine.io.vdc[MARR].value += machine.io.vdc_inc;
+                if (machine.vdc_mode == rxpce_video::VdcMode::accurate)
+                    QueueVramRead(machine, machine.io.vdc[MARR].value);
 
                 return ret;
             } else
@@ -516,6 +539,7 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
 
 void TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface frame,
                      std::uint64_t time) {
+    AdvanceMachineVdc(machine, time);
     if (host.sync_audio)
         host.sync_audio(host.context, static_cast<std::uint32_t>(time));
     int dispmin, dispmax;
@@ -531,6 +555,8 @@ void TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
              : machine.io.maxline);
 
     machine.scanline = (machine.scanline + 1) % machine.frame_lines;
+    if (machine.vdc_mode == rxpce_video::VdcMode::fast)
+        TickFastVdc(machine);
 
     ret = PceNone;
     machine.io.vdc_status &= ~VDC_RasHit;
@@ -585,27 +611,11 @@ void TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
 
         machine.frame_boundary_pending = true;
 
-        /* machine.graphics.vram() to SATB DMA */
-        if (machine.io.vdc_satb == 1 || machine.io.vdc[DCR].value & 0x0010) {
-            rxpce_video::transfer_satb(machine.graphics.vram(), machine.video.sprites,
-                                       machine.io.vdc[SATB].value);
-            machine.io.vdc_satb = 1;
-            machine.io.vdc_status &= ~VDC_SATBfinish;
-        }
         if (ret == PceIrq)
             machine.io.vdc_pendvsync = 1;
         else {
 
             if ((machine.io.vdc[CR].value & 0x08)) {
-
-                ret = PceIrq;
-            }
-        }
-    } else if (machine.scanline == std::min(machine.io.maxline + 5, machine.frame_lines - 1)) {
-        if (machine.io.vdc_satb) {
-            machine.io.vdc_satb = 0;
-            if ((machine.io.vdc[DCR].value & 0x01)) {
-                machine.io.vdc_status |= VDC_SATBfinish;
 
                 ret = PceIrq;
             }

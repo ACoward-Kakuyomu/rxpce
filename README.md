@@ -1,4 +1,4 @@
-# rxpce 1.0.0
+# rxpce 1.1.0
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -14,7 +14,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.0.0の主な対応範囲は次のとおりです。
+1.1.0の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -61,12 +61,18 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
+### 1.1.0の変更
+
+VDC DMAの進行とCPUのVRAMアクセス待ちを改善しました。詳細設定の`VDC emulation`で、精度優先の`Accurate`（既定）と速度優先の`Fast`を選べます。また、音声とフレーム制御の時刻を揃え、音声の途切れによるノイズを修正しました。
+
+1.0.0のステートは1.1.0では読み込めません。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`は引き続き利用できます。
+
 ### セーブデータと更新
 
 * `rxpce.json`は設定、実行ファイルと同じフォルダーの`backup.dat`は全ゲーム共通の2 KiBバックアップRAMです。
 * ステートとPopulousの`.ram`は、初期設定ではゲームイメージの隣に保存します。保存名・保存先は[操作説明書](MANUAL.md)に記載しています。
 * **ステート復帰はゲーム内セーブ用RAMも巻き戻します。** 最新のゲーム内セーブを残す場合は、先に正常終了して保存ファイルをバックアップしてください。
-* 更新・移動前にはアプリを終了し、`rxpce.json`、`backup.dat`、各ゲームの`.st0`／`.ram`をコピーして保管してください。
+* 更新・移動前にはアプリを終了し、`rxpce.json`、`backup.dat`、各ゲームの`.st0`／`.fst0`／`.ram`をコピーして保管してください。
 
 ### 著作者・第三者ソフトウェア
 
@@ -88,7 +94,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.0.0 |
+| Feature | Support in 1.1.0 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -129,11 +135,17 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
+### Changes in 1.1.0
+
+VDC DMA progression and CPU waits for VRAM accesses have been improved. The advanced `VDC emulation` setting offers `Accurate` (default) and `Fast` modes. Audio and frame pacing now use the same emulated clock, fixing noise caused by audio gaps.
+
+States from 1.0.0 cannot be loaded in 1.1.0. `Accurate` `.st0` and `Fast` `.fst0` states are also separate. Game-save files (`backup.dat` and `.ram`) remain usable.
+
 ### Save data and updates
 
 `rxpce.json` contains settings. `backup.dat`, beside the executable, is the shared 2 KiB backup RAM. Save states and Populous `.ram` files are stored beside the game image by default; see the [manual](MANUAL.md#english) for naming and locations.
 
-**Loading a state also rolls back game-save RAM.** To preserve newer game saves, exit normally and back up the save files first. Before updating or moving the application, close it and copy `rxpce.json`, `backup.dat` and each game's `.st0`/`.ram` files to a safe location.
+**Loading a state also rolls back game-save RAM.** To preserve newer game saves, exit normally and back up the save files first. Before updating or moving the application, close it and copy `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram` files to a safe location.
 
 ### Credits and third-party software
 

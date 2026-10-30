@@ -108,9 +108,9 @@ bool load(const std::filesystem::path& path, Cartridge& result, std::string& err
     }
 }
 std::filesystem::path state_path(const std::filesystem::path& source,
-                                 const std::filesystem::path& folder) {
+                                 const std::filesystem::path& folder, rxpce_video::VdcMode mode) {
     auto name = source.filename();
-    name.replace_extension(L".st0");
+    name.replace_extension(rxpce_video::state_extension(mode));
     const auto directory = folder.empty() || folder == L"." ? source.parent_path() : folder;
     return directory / name;
 }
