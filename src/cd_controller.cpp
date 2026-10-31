@@ -31,22 +31,85 @@ void Controller::connect(const Toc* toc, ReadData read, ReadAudio audio) {
     adpcm_ram_.fill(0);
 }
 void Controller::configure_audio(unsigned rate) {
-    if (rate > 192000)
+    if (rate > 192000 || (rate && (rate < 1000 || clock_ < (std::max)(rate, 44100u))))
         throw std::invalid_argument("Invalid CD audio rate");
     output_rate_ = rate;
     samples_.reset((rate + 4) / 5 * 2);
-    output_due_ = output_previous_ = now_;
+    output_due_ = native_due_ = native_previous_ = now_;
     output_fraction_ = rate ? rate - 1 : 0;
-    area_left_ = area_right_ = 0;
+    native_left_ = native_right_ = 0;
+    native_fraction_ = 44099;
+    adpcm_render_level_ = 0;
+    fade_cursor_ = 0;
+    fade_history_.fill(
+        {(fade_control_ & 2) ? 1 : fade_volume_, (fade_control_ & 2) ? fade_volume_ : 1});
     generated_frames_ = consumed_frames_ = 0;
-    if (rate)
+    audio_statistics_ = {};
+    if (rate) {
+        cdda_render_.configure(rate, 44100);
+        adpcm_render_.configure(rate);
         schedule(output_due_, output_fraction_, clock_, rate);
+        schedule(native_due_, native_fraction_, clock_, 44100);
+        if (audio_state_ == 0 && cdda_due_ > now_ &&
+            cdda_due_ - now_ <= (std::uint64_t(clock_) + 44099) / 44100) {
+            native_due_ = cdda_due_;
+            native_fraction_ = cdda_fraction_;
+        }
+        update_adpcm_audio();
+    } else {
+        cdda_render_ = {};
+        adpcm_render_ = {};
+    }
+}
+std::pair<unsigned, double> Controller::audio_position(std::uint64_t time, unsigned correction,
+                                                       unsigned denominator) const {
+    // The next output deadline represents frame 1 relative to the render cursor.
+    const auto difference = time >= output_due_ ? static_cast<std::int64_t>(time - output_due_)
+                                                : -static_cast<std::int64_t>(output_due_ - time);
+    const auto numerator = difference * output_rate_ + clock_ + output_rate_ - 1 - output_fraction_;
+    double position = double(numerator) / clock_ -
+                      double(correction) * output_rate_ / (double(denominator) * clock_);
+    if (position < -1e-8)
+        throw std::logic_error("Late CD render event");
+    position = (std::max)(0.0, position);
+    const auto offset = static_cast<unsigned>(position);
+    return {offset, position - offset};
+}
+void Controller::submit_native_audio() {
+    const auto width = native_due_ - native_previous_;
+    if (!output_rate_ || !width || (native_left_ == 0 && native_right_ == 0))
+        return;
+    const auto position = audio_position(native_due_, 44099 - native_fraction_, 44100);
+    cdda_render_.impulse(position.first, position.second, native_left_ / width,
+                         native_right_ / width);
+}
+void Controller::restart_native_audio() {
+    if (!output_rate_)
+        return;
+    submit_native_audio(); // Preserve a known partial interval once, before re-anchoring.
+    native_previous_ = native_due_ = now_;
+    native_fraction_ = 44099;
+    native_left_ = native_right_ = 0;
+    schedule(native_due_, native_fraction_, clock_, 44100);
+}
+void Controller::update_adpcm_audio(unsigned correction, unsigned denominator) {
+    if (output_rate_ && adpcm_sample_ != adpcm_render_level_) {
+        const auto position = audio_position(now_, correction, denominator);
+        const double delta = double(adpcm_sample_) - adpcm_render_level_;
+        adpcm_render_.step(position.first, position.second, delta, delta);
+    }
+    adpcm_render_level_ = adpcm_sample_;
 }
 void Controller::read_audio(float* out, std::size_t frames, unsigned channels) {
     if (channels == 2) {
         const auto available = samples_.queued() / 2;
         const auto missing = generated_frames_ - consumed_frames_ - available;
         const auto gap = static_cast<std::size_t>((std::min)(std::uint64_t(frames), missing));
+        if (output_rate_) {
+            audio_statistics_.requested += frames;
+            audio_statistics_.gaps += gap;
+            audio_statistics_.unavailable += frames - gap - (std::min)(frames - gap, available);
+        }
         std::fill_n(out, gap * 2, 0.0f);
         samples_.read(out + gap * 2, (frames - gap) * 2);
         consumed_frames_ += gap + (std::min)(frames - gap, available);
@@ -93,6 +156,8 @@ void Controller::length_read(bool port) {
         }
     }
     update_adpcm_irq();
+    if (port)
+        update_adpcm_audio();
 }
 void Controller::length_write() {
     adpcm_half_ = adpcm_length_ < 32768;
@@ -101,6 +166,7 @@ void Controller::length_write() {
     update_adpcm_irq();
 }
 void Controller::tick_adpcm() {
+    const unsigned fraction = adpcm_fraction_;
     if (!adpcm_low_) {
         length_read(false);
         adpcm_byte_ = adpcm_ram_[adpcm_read_++];
@@ -116,6 +182,7 @@ void Controller::tick_adpcm() {
         adpcm_low_ = !adpcm_low_;
         schedule(adpcm_due_, adpcm_fraction_, std::uint64_t(clock_) * (16 - adpcm_rate_), 32000);
     }
+    update_adpcm_audio(31999 - fraction, 32000);
 }
 void Controller::load_audio_sample() {
     cdda_sample_ = {};
@@ -163,35 +230,39 @@ void Controller::tick_cdda() {
 }
 void Controller::integrate(std::uint64_t until) {
     const auto elapsed = until - now_;
-    const double decrease =
-        (fade_control_ & 8) ? double(elapsed) / clock_ / ((fade_control_ & 4) ? 2.5 : 6.0) : 0;
-    const double next = (std::max)(0.0, fade_volume_ - decrease);
-    double average = (fade_volume_ + next) * 0.5;
-    if (decrease > fade_volume_ && decrease > 0)
-        average = fade_volume_ * fade_volume_ / (2 * decrease);
-    const double cdda_gain = (fade_control_ & 2) ? 1 : average;
-    const double adpcm_gain = (fade_control_ & 2) ? average : 1;
+    const double decrease = (fade_control_ & 8) ? double(until - fade_origin_) / clock_ /
+                                                      ((fade_control_ & 4) ? 2.5 : 6.0)
+                                                : 0;
+    const double next = (std::max)(0.0, fade_initial_ - decrease);
     if (output_rate_) {
-        area_left_ +=
-            (cdda_sample_[0] / 32768.0 * cdda_gain + adpcm_sample_ * adpcm_gain) * elapsed;
-        area_right_ +=
-            (cdda_sample_[1] / 32768.0 * cdda_gain + adpcm_sample_ * adpcm_gain) * elapsed;
+        native_left_ += cdda_sample_[0] / 32768.0 * elapsed;
+        native_right_ += cdda_sample_[1] / 32768.0 * elapsed;
     }
     fade_volume_ = next;
     now_ = until;
 }
 void Controller::emit_sample() {
-    const double width = double(now_ - output_previous_);
-    float pair[] = {width ? static_cast<float>(area_left_ / width) : 0,
-                    width ? static_cast<float>(area_right_ / width) : 0};
+    fade_history_[fade_cursor_] = {(fade_control_ & 2) ? 1 : fade_volume_,
+                                   (fade_control_ & 2) ? fade_volume_ : 1};
+    const double delay = adpcm_render_.delay_frames();
+    const auto whole = static_cast<unsigned>(delay);
+    const double fraction = delay - whole;
+    const auto& recent = fade_history_[(fade_cursor_ + 256 - whole) % 256];
+    const auto& previous = fade_history_[(fade_cursor_ + 255 - whole) % 256];
+    const double cdda_gain = recent[0] + (previous[0] - recent[0]) * fraction;
+    const double adpcm_gain = recent[1] + (previous[1] - recent[1]) * fraction;
+    fade_cursor_ = (fade_cursor_ + 1) % 256;
+    const auto cdda = cdda_render_.read(), adpcm = adpcm_render_.read();
+    float pair[] = {static_cast<float>(cdda[0] * cdda_gain + adpcm[0] * adpcm_gain),
+                    static_cast<float>(cdda[1] * cdda_gain + adpcm[1] * adpcm_gain)};
     unsigned position = 0;
+    if (samples_.queued() / 2 == (output_rate_ + 4) / 5)
+        ++audio_statistics_.overwritten;
     samples_.append(2, [&](float* out, std::size_t count) {
         std::copy_n(pair + position, count, out);
         position += static_cast<unsigned>(count);
     });
     ++generated_frames_;
-    area_left_ = area_right_ = 0;
-    output_previous_ = now_;
     schedule(output_due_, output_fraction_, clock_, output_rate_);
 }
 void Controller::reset(unsigned clock) {
@@ -223,6 +294,8 @@ void Controller::reset(unsigned clock) {
     adpcm_fraction_ = 31999;
     fade_control_ = 0;
     fade_volume_ = 1;
+    fade_origin_ = 0;
+    fade_initial_ = 1;
     configure_audio(output_rate_);
 }
 void Controller::next_sector() {
@@ -243,6 +316,8 @@ void Controller::advance(std::uint64_t now) {
         auto event = [&](std::uint64_t due) { next = (std::min)(next, (std::max)(now_, due)); };
         if (output_rate_)
             event(output_due_);
+        if (output_rate_)
+            event(native_due_);
         if (audio_state_ == 0)
             event(cdda_due_);
         if (adpcm_playing_)
@@ -256,8 +331,12 @@ void Controller::advance(std::uint64_t now) {
         if ((dma_control_ & 3) && phase_ == Phase::data && req_ && !ack_)
             event(dma_due_);
         integrate(next);
-        if (output_rate_ && now_ >= output_due_)
-            emit_sample();
+        if (output_rate_ && now_ >= native_due_) {
+            submit_native_audio();
+            native_left_ = native_right_ = 0;
+            native_previous_ = now_;
+            schedule(native_due_, native_fraction_, clock_, 44100);
+        }
         if (adpcm_write_due_ && now_ >= adpcm_write_due_) {
             adpcm_ram_[adpcm_write_++] = adpcm_write_value_;
             adpcm_write_due_ = 0;
@@ -300,9 +379,12 @@ void Controller::advance(std::uint64_t now) {
             tick_adpcm();
         if (audio_state_ == 0 && now_ >= cdda_due_)
             tick_cdda();
+        if (output_rate_ && now_ >= output_due_)
+            emit_sample();
         const bool pending =
-            (output_rate_ && output_due_ <= now_) || (audio_state_ == 0 && cdda_due_ <= now_) ||
-            (adpcm_playing_ && adpcm_due_ <= now_) || (phase_ == Phase::waiting && due_ <= now_) ||
+            (output_rate_ && (output_due_ <= now_ || native_due_ <= now_)) ||
+            (audio_state_ == 0 && cdda_due_ <= now_) || (adpcm_playing_ && adpcm_due_ <= now_) ||
+            (phase_ == Phase::waiting && due_ <= now_) ||
             ((dma_control_ & 3) && phase_ == Phase::data && req_ && !ack_ && dma_due_ <= now_);
         if (now_ == now && !pending)
             break;
@@ -530,6 +612,7 @@ void Controller::execute() {
         }
         if (current_lba_ >= audio_end_)
             audio_state_ = 3;
+        restart_native_audio();
         cdda_due_ = now_;
         cdda_fraction_ = 44099;
         schedule(cdda_due_, cdda_fraction_, clock_, 44100);
@@ -727,9 +810,12 @@ void Controller::write(unsigned reg, unsigned char value, std::uint64_t now) {
         fade_control_ = value;
         if (!(value & 8))
             fade_volume_ = 1;
+        fade_origin_ = now_;
+        fade_initial_ = fade_volume_;
         break;
     default:
         break;
     }
+    update_adpcm_audio();
 }
 } // namespace rxpce_cd

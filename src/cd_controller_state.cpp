@@ -1,5 +1,6 @@
 #include "cd_controller.h"
 #include "state_codec.h"
+#include "audio_render_state.h"
 #include <memory>
 #include <limits>
 
@@ -10,7 +11,7 @@ std::size_t Controller::state_bytes() {
 }
 std::vector<char> Controller::save_state() const {
     rxpce_state::Writer w;
-    w.block("CDDEV001", 8);
+    w.block("CDDEV002", 8);
     auto put = [&](std::uint64_t n, unsigned count) { w.number(n, count); };
     put(clock_, 4);
     put(now_, 8);
@@ -59,6 +60,22 @@ std::vector<char> Controller::save_state() const {
         put(v, 2);
     put(fade_control_, 1);
     w.real(fade_volume_);
+    put(fade_origin_, 8);
+    w.real(fade_initial_);
+    put(native_due_, 8);
+    put(native_fraction_, 4);
+    put(native_previous_, 8);
+    w.real(native_left_);
+    w.real(native_right_);
+    put(output_rate_, 4);
+    put(output_due_, 8);
+    put(output_fraction_, 4);
+    rxpce_audio::write_filter_state(w, cdda_render_.state());
+    rxpce_audio::write_filter_state(w, adpcm_render_.state());
+    put(fade_cursor_, 4);
+    for (const auto& gain : fade_history_)
+        for (double value : gain)
+            w.real(value);
     return std::move(w.data);
 }
 bool Controller::load_state(const char* data, std::size_t size, std::uint64_t cpu_time,
@@ -71,11 +88,13 @@ bool Controller::load_state(const char* data, std::size_t size, std::uint64_t cp
         require(data && size == state_bytes(), "Invalid CD device state length");
         auto candidate = std::make_unique<Controller>(*this);
         auto& s = *candidate;
+        const unsigned requested_rate = output_rate_;
         rxpce_state::Reader r(data, size);
         char tag[8];
         r.block(tag, 8);
-        require(std::memcmp(tag, "CDDEV001", 8) == 0, "Invalid CD device state version");
+        require(std::memcmp(tag, "CDDEV002", 8) == 0, "Invalid CD device state version");
         s.clock_ = static_cast<unsigned>(r.number(4));
+        require(s.clock_ == clock_ && s.clock_ >= 75, "CD clock mismatch");
         s.now_ = r.number(8);
         s.due_ = r.number(8);
         s.remainder_ = static_cast<unsigned>(r.number(1));
@@ -127,6 +146,64 @@ bool Controller::load_state(const char* data, std::size_t size, std::uint64_t cp
             v = static_cast<std::uint16_t>(r.number(2));
         s.fade_control_ = static_cast<unsigned>(r.number(1));
         s.fade_volume_ = r.real();
+        s.fade_origin_ = r.number(8);
+        s.fade_initial_ = r.real();
+        require(s.fade_origin_ <= s.now_ && std::isfinite(s.fade_initial_) &&
+                    s.fade_initial_ >= 0 && s.fade_initial_ <= 1,
+                "Invalid fade clock");
+        const double expected_fade =
+            (std::max)(0.0, s.fade_initial_ - ((s.fade_control_ & 8)
+                                                   ? double(s.now_ - s.fade_origin_) / s.clock_ /
+                                                         ((s.fade_control_ & 4) ? 2.5 : 6.0)
+                                                   : 0));
+        require(s.fade_volume_ == expected_fade, "CD fade value/clock mismatch");
+        s.native_due_ = r.number(8);
+        s.native_fraction_ = static_cast<unsigned>(r.number(4));
+        s.native_previous_ = r.number(8);
+        s.native_left_ = r.real();
+        s.native_right_ = r.real();
+        s.output_rate_ = static_cast<unsigned>(r.number(4));
+        s.output_due_ = r.number(8);
+        s.output_fraction_ = static_cast<unsigned>(r.number(4));
+        rxpce_audio::BandlimitedBuffer::State cdda_filter, adpcm_filter;
+        require(rxpce_audio::read_filter_state(r, cdda_filter) &&
+                    rxpce_audio::read_filter_state(r, adpcm_filter),
+                "Invalid CD filter state");
+        s.fade_cursor_ = static_cast<unsigned>(r.number(4));
+        for (auto& gain : s.fade_history_)
+            for (auto& value : gain) {
+                value = r.real();
+                require(std::isfinite(value) && value >= 0 && value <= 1,
+                        "Invalid CD gain history");
+            }
+        require(s.fade_cursor_ < s.fade_history_.size(), "Invalid CD gain cursor");
+        require(s.output_rate_ == 0 || (s.output_rate_ >= 1000 && s.output_rate_ <= 192000 &&
+                                        s.clock_ >= (std::max)(s.output_rate_, 44100u)),
+                "Invalid CD output rate");
+        if (s.output_rate_) {
+            require(s.native_fraction_ < 44100 && s.output_fraction_ < s.output_rate_ &&
+                        s.native_previous_ <= s.now_ && s.native_due_ > s.now_ &&
+                        s.native_due_ - s.native_previous_ <=
+                            (std::uint64_t(s.clock_) + 44099) / 44100 &&
+                        s.output_due_ > s.now_ &&
+                        s.output_due_ - s.now_ <=
+                            (std::uint64_t(s.clock_) + s.output_rate_ - 1) / s.output_rate_,
+                    "Invalid CD render clock");
+            const double elapsed = double(s.now_ - s.native_previous_);
+            require(std::isfinite(s.native_left_) && std::isfinite(s.native_right_) &&
+                        std::fabs(s.native_left_) <= elapsed + 1e-8 &&
+                        std::fabs(s.native_right_) <= elapsed + 1e-8,
+                    "Invalid CD partial PCM");
+            require(cdda_filter.rate == s.output_rate_ && cdda_filter.pcm_rate == 44100 &&
+                        adpcm_filter.rate == s.output_rate_ && adpcm_filter.pcm_rate == 0 &&
+                        s.cdda_render_.restore(cdda_filter) &&
+                        s.adpcm_render_.restore(adpcm_filter),
+                    "CD filter rate mismatch");
+        } else {
+            require(!cdda_filter.rate && !adpcm_filter.rate, "Inactive CD retained filters");
+            s.cdda_render_ = {};
+            s.adpcm_render_ = {};
+        }
         require(!r.remaining && s.clock_ == clock_ && s.now_ == cpu_time,
                 "CD clock or CPU timestamp mismatch");
         require(s.now_ < UINT64_MAX - std::uint64_t(clock_) * 2, "CD timestamp out of range");
@@ -192,7 +269,12 @@ bool Controller::load_state(const char* data, std::size_t size, std::uint64_t cp
             s.adpcm_playing_ ? (((s.decoder_.prediction() + 2048) & ~3) - 2048) / 2048.0f : 0;
         s.error_.clear();
         s.cdda_pcm_logged_ = s.adpcm_pcm_logged_ = false;
-        s.configure_audio(output_rate_);
+        s.adpcm_render_level_ = s.adpcm_sample_;
+        s.samples_.reset((s.output_rate_ + 4) / 5 * 2);
+        s.generated_frames_ = s.consumed_frames_ = 0;
+        s.audio_statistics_ = {};
+        if (s.output_rate_ != requested_rate)
+            s.configure_audio(requested_rate);
         *this = std::move(s);
         error.clear();
         return true;

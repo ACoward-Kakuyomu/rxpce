@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include "pce.h"
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include "settings.h"
 #include "frame_timing.h"
 #include "archive.h"
@@ -62,24 +64,67 @@ void RestoreCartridgeBank(unsigned bank) {
 using rxpce_host::HostFrame;
 
 namespace {
+using AudioWallClock = std::chrono::steady_clock;
+struct NativeAudioProbe {
+    std::uint64_t data_us = 0, cdda_us = 0, log_us = 0;
+    std::uint64_t wait_us = 0, present_us = 0;
+} native_audio_probe;
+std::uint64_t audio_elapsed_us(AudioWallClock::time_point begin) {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(AudioWallClock::now() - begin)
+            .count());
+}
 rxpce_machine::DeviceHost& NativeDevices() {
     static rxpce_machine::DeviceHost ports = [] {
         rxpce_machine::DeviceHost value;
-        value.frame = [](void*) { return HostFrame(); };
 #ifdef SOUND
-        value.psg_changed = [](void* context) {
+        value.psg_changed = [](void* context, std::uint8_t reg, std::uint8_t data) {
             auto& machine = *static_cast<Machine*>(context);
-            SoundPsgChanged(machine.cpu.cycles(), rxpce_audio::snapshot_psg(machine.io));
+            if (auto state = SoundPsgWrite(machine.cpu.cycles(), reg, data))
+                rxpce_audio::apply_psg_registers(machine.io, *state);
         };
-        value.sync_audio = [](void*, std::uint32_t cycles) { SyncSoundCycles(cycles); };
+        value.sync_audio = [](void* context, std::uint32_t cycles) {
+            const auto stats = SyncSoundCycles(cycles);
+            if (!stats.requested)
+                return;
+            auto& machine = *static_cast<Machine*>(context);
+            char cd_record[256]{};
+            if (machine.cd_session) {
+                const auto cd = machine.cd_controller.take_audio_statistics();
+                std::snprintf(cd_record, sizeof(cd_record),
+                              "CD audio queue: requested=%llu unavailable=%llu overwritten=%llu "
+                              "gaps=%llu frames\n",
+                              cd.requested, cd.unavailable, cd.overwritten, cd.gaps);
+            }
+            const auto probe = native_audio_probe;
+            native_audio_probe = {};
+            const auto begin = AudioWallClock::now();
+            LogDumpDetail("Audio queue: requested=%llu missing=%llu events=%llu frames\n"
+                          "%sAudio output: empty=%llu deferred=%llu\n"
+                          "Audio timing: sync_us=%llu gap_us=%llu write_us=%llu data_us=%llu "
+                          "cdda_us=%llu log_us=%llu resets=%llu wait_us=%llu present_us=%llu\n",
+                          stats.requested, stats.missing, stats.events, cd_record,
+                          stats.output_empty, stats.deferred, stats.sync_us, stats.gap_us,
+                          stats.write_us, probe.data_us, probe.cdda_us, probe.log_us,
+                          stats.clock_resets, probe.wait_us, probe.present_us);
+            native_audio_probe.log_us = audio_elapsed_us(begin);
+        };
 #endif
-        value.begin_frame = [](void*) {
-            return BeginVideoFrame(rxpce_host::runtime.frame_skip,
-                                   rxpce_host::runtime.auto_frame_skip.load());
+        value.frame_start = [](void*, std::uint64_t master_time) {
+            const auto begin = AudioWallClock::now();
+            const bool draw =
+                BeginVideoFrame(rxpce_host::runtime.frame_skip,
+                                rxpce_host::runtime.auto_frame_skip.load(), master_time);
+            native_audio_probe.wait_us =
+                (std::max)(native_audio_probe.wait_us, audio_elapsed_us(begin));
+            return draw;
         };
         value.present = [](void*, rxpce_machine::FrameSurface frame,
                            rxpce_machine::DisplayRectangle area) {
+            const auto begin = AudioWallClock::now();
             rxpce_host::PresentFrame(frame, area);
+            native_audio_probe.present_us =
+                (std::max)(native_audio_probe.present_us, audio_elapsed_us(begin));
         };
         value.controller_read = [](void* context, std::uint8_t input) {
             auto& machine = *static_cast<Machine*>(context);
@@ -217,6 +262,7 @@ void ApplyCdState(rxpce_cd::MachineState&& state) {
     machine.cd_execution_logged = machine.cd_write_logged = false;
 }
 int CartLoad() {
+    native_audio_probe = {};
     auto& machine = CurrentMachine();
     machine.cd_session = rxpce_cd::take();
     machine.configuration.kind =
@@ -231,10 +277,18 @@ int CartLoad() {
             &machine.cd_session->disc.toc(),
             [&machine](std::int64_t lba, std::array<unsigned char, 2048>& bytes,
                        std::string& error) {
-                return machine.cd_session->disc.read_data(lba, bytes, error);
+                const auto begin = AudioWallClock::now();
+                const bool result = machine.cd_session->disc.read_data(lba, bytes, error);
+                native_audio_probe.data_us =
+                    (std::max)(native_audio_probe.data_us, audio_elapsed_us(begin));
+                return result;
             },
             [&machine](std::int64_t lba, std::array<std::int16_t, 1176>& pcm, std::string& error) {
-                return machine.cd_session->disc.read_audio(lba, pcm, error);
+                const auto begin = AudioWallClock::now();
+                const bool result = machine.cd_session->disc.read_audio(lba, pcm, error);
+                native_audio_probe.cdda_us =
+                    (std::max)(native_audio_probe.cdda_us, audio_elapsed_us(begin));
+                return result;
             });
         machine.cd_controller.configure_audio(
             rxpce_host::runtime.sound.enabled ? rxpce_host::runtime.sound.sample_rate : 0);
@@ -365,6 +419,7 @@ static int RunPCE(void) {
         SetInfoString("Can't load backup.dat; existing file will be preserved");
     if (!machine.ram_path.empty() && !machine.cartridge_ram_writable)
         SetInfoString("Can't load cartridge RAM file");
+    rxpce_machine::AttachMachineVideo(machine, NativeDevices(), HostFrame());
     PceCpuHost host{
         machine.bus(),
         [](void*) { return IsMachineStopRequested(); },
@@ -385,9 +440,13 @@ static int RunPCE(void) {
         nullptr,
 #endif
         &machine};
+    host.line_deadline = [](const PceCpu&, void* context) {
+        return rxpce_machine::NextMachineLine(*static_cast<Machine*>(context));
+    };
     host.clock = [](PceCpu& cpu, void* context) {
         auto& machine = *static_cast<Machine*>(context);
-        rxpce_machine::AdvanceMachineVdc(machine, cpu.device_time);
+        if (machine.vdc_mode == rxpce_video::VdcMode::accurate)
+            rxpce_machine::AdvanceMachineVdc(machine, cpu.device_time);
         if (machine.cd_session) {
             machine.cd_controller.advance(cpu.device_time);
             machine.io.irq_status =
@@ -451,7 +510,11 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file) {
         machine.vdc_mode = rxpce_host::runtime.vdc_emulation;
         LogDumpDetail("VDC emulation=%s\n",
                       machine.vdc_mode == rxpce_video::VdcMode::fast ? "fast" : "accurate");
-        machine.line_period = rxpce_host::runtime.base_clock_hz / (machine.frame_lines * 60);
+        machine.cpu_clock_hz = static_cast<unsigned>(rxpce_host::runtime.base_clock_hz);
+        machine.line_period =
+            static_cast<int>((std::uint64_t(machine.cpu_clock_hz) * rxpce_video::vce_line_ticks +
+                              rxpce_video::video_master_hz - 1) /
+                             rxpce_video::video_master_hz);
         LogDumpDetail("Emulation clock=%d period=%d\n", rxpce_host::runtime.base_clock_hz,
                       machine.line_period);
         machine.timer_period = 1024;

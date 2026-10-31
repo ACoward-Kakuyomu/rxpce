@@ -4,3 +4,5 @@
 void SetLogDumpDetail(bool detail) noexcept;
 void LogDumpDetail(const char* format, ...) noexcept;
 void LogDump(const char* format, ...) noexcept;
+// Tests and shutdown boundaries only; filesystem I/O runs on the writer thread.
+void FlushLogDump() noexcept;

@@ -15,12 +15,14 @@ std::unique_ptr<rxpce_state::MachineSnapshot> capture_machine(const rxpce_machin
     std::copy_n(machine.backup_ram.data(), value->backup.size(), value->backup.begin());
     value->bank = machine.mapper().selection();
     value->cpu = machine.cpu;
-    value->vdc = {machine.vdc.clock.config(), machine.vdc.clock.state(), machine.vdc.dma.state(),
-                  machine.vdc.cpu};
-    if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
-        value->vdc.config.first_active = static_cast<unsigned>(machine.io.minline);
-        value->vdc.config.last_active = static_cast<unsigned>(machine.io.maxline);
-    }
+    value->vdc = {machine.vdc.scan.state(),
+                  machine.vdc.dma.state(),
+                  machine.vdc.cpu,
+                  machine.vdc.sprite_fetch_cells,
+                  machine.vdc.sprite_fetch_remaining,
+                  machine.vdc.fast_satb_lines};
+    value->video_clock = {machine.cpu_clock_hz, machine.video_clock.state(),
+                          machine.vce_clock.state()};
     if (flags & 1)
         std::copy_n(machine.populous.data(), value->populous.size(), value->populous.begin());
     return value;
@@ -31,16 +33,25 @@ void apply_machine(rxpce_machine::Machine& machine, const MachineSnapshot& value
     std::copy(value.vram.begin(), value.vram.end(), machine.graphics.vram());
     std::copy(value.sprites.begin(), value.sprites.end(), machine.video.sprites.data());
     std::copy(value.palette.begin(), value.palette.end(), machine.video.palette.data());
+    machine.cpu_clock_hz = value.video_clock.cpu_hz;
+    machine.video_clock = rxpce_video::CpuVideoClock(machine.cpu_clock_hz);
+    machine.video_clock.restore(value.video_clock.cpu);
+    machine.vce_clock.restore(value.video_clock.vce);
+    machine.frame_lines = value.video_clock.vce.frame_lines;
     machine.scanline = value.scanline;
     machine.io = value.io;
     std::copy(value.backup.begin(), value.backup.end(), machine.backup_ram.data());
     const auto revision = machine.cpu.revision + 1;
     machine.cpu = value.cpu;
+    machine.line_period = value.cpu.line_period;
+    machine.timer_period = value.cpu.timer_period;
     machine.cpu.revision = revision;
-    machine.vdc.clock = rxpce_video::VdcTiming(value.vdc.config);
-    machine.vdc.clock.restore(value.vdc.timing);
+    machine.vdc.scan.restore(value.vdc.scan);
     machine.vdc.dma.restore(value.vdc.dma);
     machine.vdc.cpu = value.vdc.cpu;
+    machine.vdc.sprite_fetch_cells = value.vdc.sprite_fetch_cells;
+    machine.vdc.sprite_fetch_remaining = value.vdc.sprite_fetch_remaining;
+    machine.vdc.fast_satb_lines = value.vdc.fast_satb_lines;
     machine.vdc.last_dma_irq_time = 0;
     if (flags & 1)
         std::copy(value.populous.begin(), value.populous.end(), machine.populous.data());

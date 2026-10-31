@@ -23,6 +23,9 @@ struct PceCpuHost {
     void* context;
     void (*clock)(PceCpu&, void*) = nullptr;
     bool (*safe_point)(PceCpu&, void*) = nullptr;
+    // Optional absolute next line deadline. Must be strictly after device_time,
+    // at most line_period ticks away; callbacks may not replace CPU state.
+    std::uint64_t (*line_deadline)(const PceCpu&, void*) = nullptr;
 };
 enum class PceCpuResult { stopped, invalid_instruction };
 void ResetPceCpu(PceCpu&, rxpce_cpu::Bus, int line_period, int timer_period);

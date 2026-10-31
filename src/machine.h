@@ -9,6 +9,8 @@
 #include "cd_session.h"
 #include "cd_controller.h"
 #include "vdc_device.h"
+#include "vce_clock.h"
+#include "machine_devices.h"
 #include <array>
 #include <memory>
 #include <string>
@@ -21,10 +23,10 @@ struct VideoState {
     std::array<std::int16_t, 256> sprites{};
     std::array<rxpce_video::Pixel, 512> palette{};
     std::array<std::uint8_t, frame_width * frame_height> priority{};
-    bool background_enabled = true, sprites_enabled = true, render_frame = true;
-    int scroll_changed = 0, scroll_y_difference = 0, old_scroll_y_difference = 0;
-    std::uint16_t old_scroll_x = 0, old_scroll_y = 0;
-    int previous_line = 0, uses_sprite_priority = 0;
+    bool background_enabled = true, sprites_enabled = true, render_frame = true, next_render = true;
+    int row_bias = 0;
+    bool output_bound = false;
+    int uses_sprite_priority = 0;
 };
 class Machine {
   public:
@@ -33,6 +35,8 @@ class Machine {
         void (*write_io)(void*, std::uint16_t, std::uint8_t) = nullptr;
         void (*access)(void*, Region, std::uint32_t, bool) = nullptr;
         void (*bank_changed)(void*, std::uint8_t) = nullptr;
+        void (*scan_event)(void*, const rxpce_video::ScanEvent&,
+                           std::uint64_t master_time) = nullptr;
         void* context = nullptr;
     } connections;
     Machine() = default;
@@ -51,10 +55,15 @@ class Machine {
     std::array<std::uint8_t, 196608> super_ram{};
     GraphicsMemory graphics;
     VideoState video;
+    DeviceHost video_ports;
+    FrameSurface video_surface{};
     IoState io;
     PceCpu cpu;
     rxpce_video::VdcDevice vdc;
-    int line_period = 1, timer_period = 1, frame_lines = 263, scanline = 0;
+    std::uint32_t cpu_clock_hz = 7170000;
+    rxpce_video::CpuVideoClock video_clock{7170000};
+    rxpce_video::VceClock vce_clock;
+    int line_period = 456, timer_period = 1, frame_lines = 262, scanline = 0;
     bool frame_boundary_pending = false; // Runtime-only request, consumed at a CPU safe point.
     std::unique_ptr<rxpce_cd::Session> cd_session;
     rxpce_cd::Controller cd_controller;

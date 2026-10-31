@@ -5,9 +5,9 @@
 #include <cmath>
 #include <cstddef>
 namespace rxpce_audio {
-template <class Client, class Render, class Read>
+template <class Client, class Render, class Available, class Read, class Observe>
 HRESULT service_wasapi(Client& client, Render& render, UINT32 capacity, UINT32 target,
-                       unsigned channels, Read read) {
+                       unsigned channels, Available available, Read read, Observe observe) {
     if (!capacity || !target || target > capacity || (channels != 1 && channels != 2))
         return E_INVALIDARG;
     UINT32 padding = 0;
@@ -18,7 +18,17 @@ HRESULT service_wasapi(Client& client, Render& render, UINT32 capacity, UINT32 t
         return E_INVALIDARG;
     if (padding >= target)
         return S_OK;
-    const UINT32 frames = target - padding;
+    const UINT32 needed = target - padding;
+    UINT32 frames = needed;
+    try {
+        if (padding)
+            frames = static_cast<UINT32>((std::min)(std::size_t(needed), available()));
+        observe(padding == 0, frames < needed);
+    } catch (...) {
+        return E_FAIL;
+    }
+    if (!frames)
+        return S_OK;
     BYTE* bytes = nullptr;
     status = render.GetBuffer(frames, &bytes);
     if (FAILED(status))

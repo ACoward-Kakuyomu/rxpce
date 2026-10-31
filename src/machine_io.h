@@ -11,7 +11,7 @@ struct IoState {
     std::array<Register16, 512> vce{};
     Register16 vce_reg;
     std::uint16_t vdc_inc = 1;
-    std::uint8_t vdc_reg = 0, vdc_status = 0, vdc_ratch = 0, vdc_pendvsync = 0;
+    std::uint8_t vdc_reg = 0, vdc_status = 0, vdc_ratch = 0;
     std::int32_t bg_h = 0, bg_w = 0, screen_w = 0, screen_h = 0, minline = 0, maxline = 255;
     rxpce_input::ControllerBus controllers;
     std::array<std::array<std::uint8_t, 8>, 6> psg{};

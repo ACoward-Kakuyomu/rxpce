@@ -10,8 +10,13 @@ struct Writer {
     void number(std::uint64_t value, unsigned bytes) {
         if (bytes < 1 || bytes > 8)
             throw std::invalid_argument("Invalid state number width");
+        const auto start = data.size();
+        if (bytes > data.max_size() - start)
+            throw std::length_error("State output is too large");
+        data.resize(start + bytes);
+        auto* output = data.data() + start;
         for (unsigned n = 0; n < bytes; ++n)
-            data.push_back(static_cast<char>(value >> (n * 8)));
+            output[n] = static_cast<char>(value >> (n * 8));
     }
     void block(const void* ptr, std::size_t size) {
         if (!size)

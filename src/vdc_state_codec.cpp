@@ -1,13 +1,16 @@
 #include "vdc_state_codec.h"
 #include "state_codec.h"
 #include <stdexcept>
+#include <array>
 namespace rxpce_state {
 bool valid_vdc(const VdcSnapshot& s, std::string& error) {
     try {
-        rxpce_video::VdcTiming clock(s.config);
-        clock.restore(s.timing);
-        if (!rxpce_video::valid_dma(s.dma) || s.dma.dot_time != s.timing.dots)
+        rxpce_video::VdcScan scan;
+        scan.restore(s.scan);
+        if (!rxpce_video::valid_dma(s.dma) || s.dma.dot_time != s.scan.dot_time)
             throw std::invalid_argument("Invalid VDC DMA phase or clock");
+        if (s.sprite_fetch_cells > 16 || s.sprite_fetch_remaining > 256 || s.fast_satb_lines > 4)
+            throw std::invalid_argument("Invalid sprite fetch reservation");
         if (static_cast<unsigned>(s.cpu.kind) > 2 || s.cpu.elapsed > 3 ||
             (s.cpu.kind == rxpce_video::CpuVramKind::none && s.cpu.elapsed) ||
             (s.cpu.increment != 1 && s.cpu.increment != 32 && s.cpu.increment != 64 &&
@@ -25,21 +28,9 @@ std::vector<char> encode_vdc(const VdcSnapshot& s) {
     if (!valid_vdc(s, error))
         throw std::invalid_argument(error);
     Writer w;
-    const auto& c = s.config;
-    const auto& t = s.timing;
     const auto& d = s.dma;
-    for (auto v : {c.line_period, c.frame_lines, c.first_active, c.last_active})
-        w.number(v, 4);
-    w.number(t.cpu_time, 8);
-    w.number(t.dots, 8);
-    w.number(t.line_offset, 4);
-    w.number(t.line, 4);
-    w.number(t.dot_remainder, 1);
-    w.number(t.vce_control, 1);
-    for (auto v : {t.requested_cr, t.line_cr, t.requested_mwr, t.active_mwr})
-        w.number(v, 2);
-    w.number(t.burst, 1);
-    w.number(t.line_dots, 8);
+    const auto scan = encode_vdc_scan(s.scan);
+    w.block(scan.data(), scan.size());
     w.number(d.dot_time, 8);
     w.number(static_cast<unsigned>(d.phase), 1);
     w.number(d.source, 2);
@@ -60,6 +51,9 @@ std::vector<char> encode_vdc(const VdcSnapshot& s) {
     w.number(s.cpu.read_buffer, 2);
     w.number(s.cpu.elapsed, 1);
     w.number(s.cpu.increment, 2);
+    w.number(s.sprite_fetch_cells, 1);
+    w.number(s.sprite_fetch_remaining, 2);
+    w.number(s.fast_satb_lines, 1);
     if (w.data.size() != vdc_state_bytes)
         throw std::logic_error("VDC wire size mismatch");
     return w.data;
@@ -72,25 +66,11 @@ bool decode_vdc(const char* data, std::size_t size, VdcSnapshot& output, std::st
     try {
         Reader r(data, size);
         VdcSnapshot next;
-        auto& c = next.config;
-        auto& t = next.timing;
         auto& d = next.dma;
-        c.line_period = static_cast<std::uint32_t>(r.number(4));
-        c.frame_lines = static_cast<std::uint32_t>(r.number(4));
-        c.first_active = static_cast<std::uint32_t>(r.number(4));
-        c.last_active = static_cast<std::uint32_t>(r.number(4));
-        t.cpu_time = r.number(8);
-        t.dots = r.number(8);
-        t.line_offset = static_cast<std::uint32_t>(r.number(4));
-        t.line = static_cast<std::uint32_t>(r.number(4));
-        t.dot_remainder = static_cast<std::uint8_t>(r.number(1));
-        t.vce_control = static_cast<std::uint8_t>(r.number(1));
-        t.requested_cr = static_cast<std::uint16_t>(r.number(2));
-        t.line_cr = static_cast<std::uint16_t>(r.number(2));
-        t.requested_mwr = static_cast<std::uint16_t>(r.number(2));
-        t.active_mwr = static_cast<std::uint16_t>(r.number(2));
-        t.burst = r.boolean();
-        t.line_dots = r.number(8);
+        std::array<char, vdc_scan_state_bytes> scan;
+        r.block(scan.data(), scan.size());
+        if (!decode_vdc_scan(scan.data(), scan.size(), next.scan, error))
+            return false;
         d.dot_time = r.number(8);
         d.phase = static_cast<rxpce_video::DmaPhase>(r.number(1));
         d.source = static_cast<std::uint16_t>(r.number(2));
@@ -111,6 +91,9 @@ bool decode_vdc(const char* data, std::size_t size, VdcSnapshot& output, std::st
         next.cpu.read_buffer = static_cast<std::uint16_t>(r.number(2));
         next.cpu.elapsed = static_cast<std::uint8_t>(r.number(1));
         next.cpu.increment = static_cast<std::uint16_t>(r.number(2));
+        next.sprite_fetch_cells = static_cast<std::uint8_t>(r.number(1));
+        next.sprite_fetch_remaining = static_cast<std::uint16_t>(r.number(2));
+        next.fast_satb_lines = static_cast<std::uint8_t>(r.number(1));
         if (!valid_vdc(next, error))
             return false;
         output = next;

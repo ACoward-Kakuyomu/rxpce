@@ -20,7 +20,7 @@ rxpce_cpu::Bus Machine::bus() noexcept {
                               auto& machine = *static_cast<Machine*>(context);
                               // The common scheduler has usually synchronized this timestamp
                               // already. Keep I/O's explicit synchronization for register writes.
-                              if (time != machine.vdc.clock.state().cpu_time)
+                              if (time != machine.video_clock.state().cpu_time)
                                   AdvanceMachineVdc(machine, time);
                           },
                           [](std::uint32_t address, bool write, void* context) {

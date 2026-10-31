@@ -63,8 +63,10 @@ struct Session {
         enumerator.Reset();
     }
     HRESULT service() {
-        return rxpce_audio::service_wasapi(*client.Get(), *render.Get(), capacity, target,
-                                           channel_count, ReadMixedAudio);
+        return rxpce_audio::service_wasapi(
+            *client.Get(), *render.Get(), capacity, target, channel_count,
+            AvailableMixedAudioFrames, ReadMixedAudio,
+            [this](bool empty, bool deferred) { ReportAudioOutput(started && empty, deferred); });
     }
     HRESULT start() {
         auto status = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,

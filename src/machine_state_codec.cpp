@@ -21,7 +21,11 @@ bool valid_requirements(const SnapshotRequirements& requirements, std::string& e
         return false;
     }
     if (requirements.line_period <= 0 || requirements.timer_period <= 0 ||
-        !requirements.frame_lines) {
+        !requirements.cpu_clock_hz ||
+        static_cast<std::uint64_t>(requirements.line_period) !=
+            (std::uint64_t(requirements.cpu_clock_hz) * rxpce_video::vce_line_ticks +
+             rxpce_video::video_master_hz - 1) /
+                rxpce_video::video_master_hz) {
         error = "invalid snapshot clocks";
         return false;
     }
@@ -38,7 +42,7 @@ bool valid_machine(const MachineSnapshot& value, const SnapshotRequirements& req
                    std::string& error) {
     if (!valid_requirements(requirements, error) || !valid_io(value.io, error))
         return false;
-    if (value.scanline < 0 || static_cast<unsigned>(value.scanline) >= requirements.frame_lines) {
+    if (value.scanline < -1 || value.scanline > 511) {
         error = "invalid state scanline";
         return false;
     }
@@ -49,24 +53,57 @@ bool valid_machine(const MachineSnapshot& value, const SnapshotRequirements& req
     }
     if (!valid_vdc(value.vdc, error))
         return false;
-    const auto& c = value.vdc.config;
-    const auto& t = value.vdc.timing;
-    if (c.line_period != unsigned(requirements.line_period) ||
-        c.frame_lines != requirements.frame_lines || c.first_active != unsigned(value.io.minline) ||
-        c.last_active != unsigned(value.io.maxline) ||
-        (requirements.vdc_mode == rxpce_video::VdcMode::accurate &&
-         (t.cpu_time != value.cpu.cpu.elapsed || t.line != unsigned(value.scanline) ||
-          t.line_offset !=
-              std::uint64_t(std::int64_t(value.cpu.line_period) - value.cpu.line_remaining))) ||
-        t.requested_cr != value.io.vdc[5].value || t.requested_mwr != value.io.vdc[9].value) {
-        error = "VDC/CPU clock or register mismatch";
+    const auto& t = value.vdc.scan;
+    try {
+        (void)encode_video_clock(value.video_clock);
+        if (value.video_clock.cpu_hz != requirements.cpu_clock_hz)
+            throw std::invalid_argument("Video clock setting mismatch");
+        const auto& v = value.video_clock.vce;
+        rxpce_video::CpuVideoClock conversion(requirements.cpu_clock_hz);
+        conversion.restore(value.video_clock.cpu);
+        rxpce_video::VceClock clock;
+        clock.restore(v);
+        if (t.dot_time != v.dots)
+            throw std::invalid_argument("VCE/VDC dot clock mismatch");
+        auto next_master = clock.next_event_time();
+        rxpce_video::VdcScan scan;
+        scan.restore(t);
+        if (const auto dot = scan.next_event_dot()) {
+            constexpr unsigned divs[] = {4, 3, 2, 2};
+            const auto delta = (*dot - v.dots) * divs[v.control & 3] - v.dot_remainder;
+            if (delta <= UINT64_MAX - v.master_time)
+                next_master = (std::min)(next_master, v.master_time + delta);
+        }
+        const auto next_line = conversion.cpu_deadline(next_master);
+        if (next_line <= value.cpu.cpu.elapsed ||
+            next_line - value.cpu.cpu.elapsed != unsigned(value.cpu.line_remaining))
+            throw std::invalid_argument("Invalid next video event deadline");
+        const auto& a = t.active;
+        const unsigned bg_width = (std::min)(128u, 32u << ((a.memory >> 4) & 3));
+        if (value.io.screen_h != a.vdw + 1 || value.io.minline != 0 ||
+            value.io.maxline != value.io.screen_h - 1 ||
+            value.io.screen_w != (std::min)(512, int((a.hdr & 127) + 1) * 8) ||
+            value.io.bg_w != int(bg_width) || value.io.bg_h != ((a.memory & 64) ? 64 : 32))
+            throw std::invalid_argument("VDC geometry does not match period latches");
+        const auto& q = t.requested;
+        if (value.video_clock.cpu.cpu_time != value.cpu.cpu.elapsed || t.dot_time != v.dots ||
+            t.physical_line != v.master_time / 1365 || value.scanline != t.row ||
+            t.dot_time - t.last_line_dot > (v.line_master + 1) / 2 ||
+            q.control != value.io.vdc[5].value || q.raster != value.io.vdc[6].value ||
+            q.x_scroll != value.io.vdc[7].value || q.y_scroll != value.io.vdc[8].value ||
+            q.memory != value.io.vdc[9].value || q.hsr != value.io.vdc[10].value ||
+            q.hdr != value.io.vdc[11].value || q.vpr != value.io.vdc[12].value ||
+            q.vdw != value.io.vdc[13].value || q.vcr != value.io.vdc[14].value)
+            throw std::invalid_argument("VDC/VCE/CPU clock or register mismatch");
+    } catch (const std::exception& e) {
+        error = e.what();
         return false;
     }
     if (requirements.vdc_mode == rxpce_video::VdcMode::fast &&
-        (t.cpu_time || t.dots || t.line || t.line_offset || t.line_dots ||
-         value.vdc.dma.phase != rxpce_video::DmaPhase::idle ||
-         value.vdc.cpu.kind != rxpce_video::CpuVramKind::none)) {
-        error = "invalid Fast VDC inactive clock or transfer";
+        (value.vdc.dma.phase != rxpce_video::DmaPhase::idle ||
+         value.vdc.cpu.kind != rxpce_video::CpuVramKind::none || value.vdc.sprite_fetch_cells ||
+         value.vdc.sprite_fetch_remaining)) {
+        error = "invalid Fast VDC transfer";
         return false;
     }
     if (value.io.controllers.count != requirements.controllers ||
@@ -110,6 +147,8 @@ std::vector<char> encode_machine(const MachineSnapshot& value,
     w.block(cpu.data(), cpu.size());
     const auto vdc = encode_vdc(value.vdc);
     w.block(vdc.data(), vdc.size());
+    const auto clock = encode_video_clock(value.video_clock);
+    w.block(clock.data(), clock.size());
     if (requirements.flags & 1)
         w.block(value.populous.data(), value.populous.size());
     if (w.data.size() != machine_state_bytes(requirements.flags))
@@ -150,6 +189,11 @@ bool decode_machine(const char* data, std::size_t size, const SnapshotRequiremen
         std::array<char, vdc_state_bytes> vdc;
         r.block(vdc.data(), vdc.size());
         if (!decode_vdc(vdc.data(), vdc.size(), next->vdc, error))
+            return false;
+        std::array<char, video_clock_state_bytes> clock;
+        r.block(clock.data(), clock.size());
+        if (!decode_video_clock(clock.data(), clock.size(), requirements.cpu_clock_hz,
+                                next->video_clock, error))
             return false;
         if (requirements.flags & 1)
             r.block(next->populous.data(), next->populous.size());

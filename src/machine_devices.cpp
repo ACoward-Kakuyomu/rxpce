@@ -11,7 +11,6 @@ namespace rxpce_machine {
 using namespace vdc;
 namespace {
 constexpr int MAXDISP = 227;
-enum PceEvent { PceNone, PceIrq };
 #ifdef _DEBUG
 void TraceHost(const DeviceHost& host, const char* format, ...) {
     if (!host.trace)
@@ -25,248 +24,124 @@ void TraceHost(const DeviceHost& host, const char* format, ...) {
 #else
 #define TRACE(...) ((void)0)
 #endif
-void FlushVideoRows(Machine& machine, FrameSurface frame, int end) {
-    const auto area = VisibleRectangle(machine);
-    const int first = std::max(machine.video.previous_line, area.y);
-    end = std::min(end, area.y + area.height);
-    if (end <= first || !machine.video.render_frame)
-        return;
-    ClearVideoRows(machine, frame, first, end - 1);
-    if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-        RenderSprites(machine, frame, first, end, 0);
-    RenderBackground(machine, frame, first, end - 1);
-    if ((machine.io.vdc[CR].value & 0x40) && machine.video.sprites_enabled)
-        RenderSprites(machine, frame, first, end, 1);
-    machine.video.previous_line = end;
-}
-void FlushScrollChange(Machine& machine, FrameSurface frame, int end) {
-    if (!machine.video.scroll_changed)
-        return;
-    const auto x = machine.io.vdc[BXR].value, y = machine.io.vdc[BYR].value;
-    const auto difference = machine.video.scroll_y_difference;
-    machine.io.vdc[BXR].value = machine.video.old_scroll_x;
-    machine.io.vdc[BYR].value = machine.video.old_scroll_y;
-    machine.video.scroll_y_difference = machine.video.old_scroll_y_difference;
-    FlushVideoRows(machine, frame, end);
-    machine.io.vdc[BXR].value = x;
-    machine.io.vdc[BYR].value = y;
-    machine.video.scroll_y_difference = difference;
-    machine.video.scroll_changed = 0;
-}
-void FlushBeforePaletteWrite(Machine& machine, const DeviceHost& host) {
-    if (!host.frame || !machine.video.render_frame || machine.scanline < machine.io.minline ||
-        machine.scanline > machine.io.maxline)
-        return;
-    const auto frame = host.frame(host.context);
-    FlushScrollChange(machine, frame, machine.scanline);
-    FlushVideoRows(machine, frame, machine.scanline);
-}
-void PresentScreen(Machine& machine, const DeviceHost& host, FrameSurface frame) {
-    if (host.present)
-        host.present(host.context, frame, VisibleRectangle(machine));
-}
 } // namespace
-void ResetVideoAfterLoad(Machine& machine, FrameSurface frame) {
-    auto& v = machine.video;
-    v.render_frame = false;
-    v.previous_line = 0;
-    v.scroll_changed = v.scroll_y_difference = v.old_scroll_y_difference = 0;
-    v.old_scroll_x = v.old_scroll_y = 0;
-    v.uses_sprite_priority = 0;
-    v.priority.fill(0);
-    machine.frame_boundary_pending = false;
-    std::fill_n(machine.graphics.background_dirty(), GraphicsMemory::background_tiles, 1);
-    std::fill_n(machine.graphics.sprite_dirty(), GraphicsMemory::sprite_tiles, 1);
-    if (frame.pixels)
-        std::fill_n(frame.pixels, frame.count, v.palette[0]);
+void AttachMachineVideo(Machine& m, const DeviceHost& host, FrameSurface frame) {
+    m.video_ports = host;
+    m.video_surface = frame;
+    m.video.output_bound = true;
+    m.video.next_render = !host.begin_frame || host.begin_frame(host.context);
+    m.video.render_frame = m.video.next_render;
 }
-DisplayRectangle VisibleRectangle(const Machine& machine) {
-    const int first =
-        machine.io.maxline - machine.io.minline > MAXDISP
-            ? machine.io.minline + ((machine.io.maxline - machine.io.minline - MAXDISP + 1) >> 1)
-            : machine.io.minline;
-    const int last =
-        machine.io.maxline - machine.io.minline > MAXDISP
-            ? machine.io.maxline - ((machine.io.maxline - machine.io.minline - MAXDISP + 1) >> 1)
-            : machine.io.maxline;
-    return {(int(frame_width) - machine.io.screen_w) / 2, first, machine.io.screen_w,
-            last - first + 1};
+void ResetVideoAfterLoad(Machine& m, FrameSurface frame) {
+    m.video.render_frame = m.video.next_render = false;
+    m.video.row_bias =
+        (std::max)(0, ((std::min)(m.io.screen_h, m.frame_lines) - int(frame_height)) / 2);
+    m.video.priority.fill(0);
+    m.video.uses_sprite_priority = 0;
+    m.frame_boundary_pending = false;
+    std::fill_n(m.graphics.background_dirty(), GraphicsMemory::background_tiles, 1);
+    std::fill_n(m.graphics.sprite_dirty(), GraphicsMemory::sprite_tiles, 1);
+    if (frame.pixels)
+        std::fill_n(frame.pixels, frame.count, m.video.palette[0]);
+}
+DisplayRectangle VisibleRectangle(const Machine& m) {
+    const auto rows = (std::min)({int(frame_height), m.io.screen_h, m.frame_lines});
+    const auto height = (std::min)(MAXDISP + 1, rows);
+    return {(int(frame_width) - m.io.screen_w) / 2, (rows - height) / 2, m.io.screen_w, height};
+}
+void RenderMachineScanline(Machine& m, FrameSurface frame, int row) {
+    if (!m.video.render_frame || !frame.pixels || row < m.video.row_bias ||
+        row >= m.video.row_bias + int(frame_height))
+        return;
+    const auto area = VisibleRectangle(m);
+    const auto output = row - m.video.row_bias;
+    if (output < area.y || output >= area.y + area.height)
+        return;
+    const auto control = m.vdc.scan.state().active.control;
+    const auto plan =
+        (control & 0x40) ? EvaluateMachineSprites(m, row) : rxpce_video::SpriteLinePlan{};
+    ClearVideoRows(m, frame, row, row);
+    m.video.uses_sprite_priority = 0;
+    if ((control & 0x40) && m.video.sprites_enabled)
+        RenderSpriteLine(m, frame, row, 0, plan);
+    const auto& scan = m.vdc.scan.state();
+    RenderBackground(m, frame, row, row,
+                     {scan.active.control, scan.active.x_scroll, int(scan.y_counter) - row});
+    if ((control & 0x40) && m.video.sprites_enabled)
+        RenderSpriteLine(m, frame, row, 1, plan);
+    if (m.vce_clock.state().control & 0x80) {
+        auto* pixels = frame.pixels + output * frame_width;
+        for (unsigned x = 0; x < frame_width; ++x)
+            pixels[x] |= rxpce_video::monochrome_bit;
+    }
+}
+void PresentMachineFrame(Machine& m, const DeviceHost& host, FrameSurface frame,
+                         std::uint64_t master) {
+    if (host.sync_audio)
+        host.sync_audio(host.context,
+                        static_cast<std::uint32_t>(m.video_clock.cpu_deadline(master)));
+    if (m.video.render_frame && host.present && frame.pixels)
+        host.present(host.context, frame, VisibleRectangle(m));
+    m.video.next_render = host.frame_start ? host.frame_start(host.context, master)
+                                           : (!host.begin_frame || host.begin_frame(host.context));
 }
 void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, std::uint8_t V) {
     AdvanceMachineVdc(machine, machine.cpu.cpu.elapsed);
 
     switch (A & 0x1C00) {
-    case 0x0000: /* VDC */
-        switch (A & 3) {
-        case 0:
+    case 0x0000: {
+        const auto port = A & 3;
+        if (port == 0) {
             machine.io.vdc_reg = V & 31;
             return;
-        case 1:
+        }
+        if (port == 1)
             return;
-        case 2:
-
-            switch (machine.io.vdc_reg) {
-            case VWR:
+        const auto reg = machine.io.vdc_reg;
+        if (reg == VWR) {
+            if (port == 2) {
                 machine.io.vdc_ratch = V;
-
                 return;
-            case HDR:
-                machine.io.screen_w = std::min((V + 1) * 8, 512);
-
-                break;
-            case MWR: {
-                static constexpr byte bgw[] = {32, 64, 128, 128};
-                machine.io.bg_h = (V & 0x40) ? 64 : 32;
-                machine.io.bg_w = bgw[(V >> 4) & 3];
             }
-                TRACE("bg:%dx%d, V:%X\n", machine.io.bg_w, machine.io.bg_h, V);
-
-                break;
-            case BYR:
-                if (!machine.video.scroll_changed) {
-                    machine.video.old_scroll_x = machine.io.vdc[BXR].value;
-                    machine.video.old_scroll_y = machine.io.vdc[BYR].value;
-                    machine.video.old_scroll_y_difference = machine.video.scroll_y_difference;
-                }
-                machine.io.vdc[BYR].set_low(V);
-                machine.video.scroll_changed = 1;
-
-                machine.video.scroll_y_difference = machine.scanline - 1;
-
-                return;
-            case BXR:
-                if (!machine.video.scroll_changed) {
-                    machine.video.old_scroll_x = machine.io.vdc[BXR].value;
-                    machine.video.old_scroll_y = machine.io.vdc[BYR].value;
-                    machine.video.old_scroll_y_difference = machine.video.scroll_y_difference;
-                }
-                machine.io.vdc[BXR].set_low(V);
-                machine.video.scroll_changed = 1;
-                return;
-
-#define PRINT_VDC_L(REG)                                                                           \
-    case REG:                                                                                      \
-        TRACE(#REG "l: %X\n", V);                                                                  \
-        break;
-
-                PRINT_VDC_L(VPR);
-                PRINT_VDC_L(VDW);
-                PRINT_VDC_L(VCR);
-                PRINT_VDC_L(DCR);
-            }
-            machine.io.vdc[machine.io.vdc_reg].set_low(V);
-            if (machine.io.vdc_reg == CR)
-                machine.vdc.clock.write_cr(machine.io.vdc[CR].value);
-            if (machine.io.vdc_reg == MWR)
-                machine.vdc.clock.write_mwr(machine.io.vdc[MWR].value);
-
-            if (machine.io.vdc_reg > 19) {
-                TRACE("ignore write lo vdc%d,%02x\n", machine.io.vdc_reg, V);
-            }
-            return;
-        case 3:
-
-            switch (machine.io.vdc_reg) {
-            case VWR:
-                if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
-                    WriteVramDirect(
-                        machine, machine.io.vdc[MAWR].value,
-                        static_cast<std::uint16_t>(machine.io.vdc_ratch | (unsigned(V) << 8)));
-                    machine.io.vdc[MAWR].value += machine.io.vdc_inc;
-                    return;
-                }
-                QueueVramWrite(
-                    machine, machine.io.vdc[MAWR].value,
-                    static_cast<std::uint16_t>(machine.io.vdc_ratch | (unsigned(V) << 8)));
-                return;
-            case MARR:
-                machine.io.vdc[MARR].set_high(V);
-                if (machine.vdc_mode == rxpce_video::VdcMode::accurate)
-                    QueueVramRead(machine, machine.io.vdc[MARR].value);
-                return;
-            case VDW:
-
-                machine.io.vdc[VDW].set_high(V);
-                machine.io.screen_h = std::min((machine.io.vdc[VDW].value & 511) + 1, 256);
-                machine.io.maxline = machine.io.screen_h - 1;
-                TRACE("VDWh: %X\n", machine.io.vdc[VDW].value);
-                return;
-            case LENR:
-
-                machine.io.vdc[LENR].set_high(V);
-                if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
-                    TransferFastVram(machine);
-                    return;
-                }
-                machine.vdc.dma.request_vram(machine.io.vdc[SOUR].value,
-                                             machine.io.vdc[DISTR].value,
-                                             machine.io.vdc[LENR].value, machine.io.vdc[DCR].value);
-                return;
-            case CR: {
-                static constexpr byte incsize[] = {1, 32, 64, 128};
-                machine.io.vdc_inc = incsize[(V >> 3) & 3];
-
-            } break;
-            case HDR:
-
-                TRACE("HDRh\n");
-                break;
-            case BYR:
-                if (!machine.video.scroll_changed) {
-                    machine.video.old_scroll_x = machine.io.vdc[BXR].value;
-                    machine.video.old_scroll_y = machine.io.vdc[BYR].value;
-                    machine.video.old_scroll_y_difference = machine.video.scroll_y_difference;
-                }
-                machine.io.vdc[BYR].set_high(V & 1);
-                machine.video.scroll_changed = 1;
-
-                {
-                    machine.video.scroll_y_difference = machine.scanline - 1;
-                }
-
-                return;
-            case SATB:
-                machine.io.vdc[SATB].set_high(V);
-
-                machine.vdc.dma.request_satb(machine.io.vdc[SATB].value);
-                return;
-            case BXR:
-                if (!machine.video.scroll_changed) {
-                    machine.video.old_scroll_x = machine.io.vdc[BXR].value;
-                    machine.video.old_scroll_y = machine.io.vdc[BYR].value;
-                    machine.video.old_scroll_y_difference = machine.video.scroll_y_difference;
-                }
-                machine.io.vdc[BXR].set_high(V & 3);
-                machine.video.scroll_changed = 1;
-
-                return;
-
-#define PRINT_VDC_H(REG)                                                                           \
-    case REG:                                                                                      \
-        TRACE(#REG "h: %X\n", V);                                                                  \
-        break;
-                PRINT_VDC_H(VPR);
-                PRINT_VDC_H(VCR);
-                PRINT_VDC_H(DCR);
-            }
-
-            machine.io.vdc[machine.io.vdc_reg].set_high(V);
-            if (machine.io.vdc_reg == CR)
-                machine.vdc.clock.write_cr(machine.io.vdc[CR].value);
-            if (machine.io.vdc_reg == MWR)
-                machine.vdc.clock.write_mwr(machine.io.vdc[MWR].value);
-
-            if (machine.io.vdc_reg > 19) {
-                TRACE("ignore write hi vdc%d,%02x\n", machine.io.vdc_reg, V);
-            }
+            const auto value =
+                static_cast<std::uint16_t>(machine.io.vdc_ratch | (unsigned(V) << 8));
+            if (machine.vdc_mode == rxpce_video::VdcMode::fast) {
+                WriteVramDirect(machine, machine.io.vdc[MAWR].value, value);
+                machine.io.vdc[MAWR].value += machine.io.vdc_inc;
+            } else
+                QueueVramWrite(machine, machine.io.vdc[MAWR].value, value);
             return;
         }
-        break;
+        if (port == 2)
+            machine.io.vdc[reg].set_low(V);
+        else
+            machine.io.vdc[reg].set_high(V);
+        WriteMachineVdcRegister(machine, reg);
+        if (port == 3) {
+            if (reg == MARR && machine.vdc_mode == rxpce_video::VdcMode::accurate)
+                QueueVramRead(machine, machine.io.vdc[MARR].value);
+            if (reg == CR) {
+                constexpr byte increments[] = {1, 32, 64, 128};
+                machine.io.vdc_inc = increments[(V >> 3) & 3];
+            }
+            if (reg == LENR) {
+                if (machine.vdc_mode == rxpce_video::VdcMode::fast)
+                    TransferFastVram(machine);
+                else
+                    machine.vdc.dma.request_vram(
+                        machine.io.vdc[SOUR].value, machine.io.vdc[DISTR].value,
+                        machine.io.vdc[LENR].value, machine.io.vdc[DCR].value);
+            }
+            if (reg == SATB)
+                machine.vdc.dma.request_satb(machine.io.vdc[SATB].value);
+        }
+        return;
+    }
 
     case 0x0400: /* VCE */
         switch (A & 7) {
         case 0:
-            machine.vdc.clock.write_vce(V);
+            machine.vce_clock.write_control(V);
             return;
         case 2:
             machine.io.vce_reg.set_low(V);
@@ -275,13 +150,11 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             machine.io.vce_reg.set_high(V & 1);
             return;
         case 4:
-            FlushBeforePaletteWrite(machine, host);
             machine.io.vce[machine.io.vce_reg.value].set_low(V);
             rxpce_video::set_palette_color(machine.video.palette.data(), machine.io.vce_reg.value,
                                            machine.io.vce[machine.io.vce_reg.value].value);
             return;
         case 5:
-            FlushBeforePaletteWrite(machine, host);
             machine.io.vce[machine.io.vce_reg.value].set_high(V);
             rxpce_video::set_palette_color(machine.video.palette.data(), machine.io.vce_reg.value,
                                            machine.io.vce[machine.io.vce_reg.value].value);
@@ -347,7 +220,7 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             TRACE("ignored PSG write\n");
         }
         if (host.psg_changed)
-            host.psg_changed(host.context);
+            host.psg_changed(host.context, static_cast<std::uint8_t>(A & 15), V);
         return;
 
     case 0x0c00: /* timer */
@@ -539,99 +412,16 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
 
 void TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface frame,
                      std::uint64_t time) {
+    if (!machine.video.output_bound)
+        AttachMachineVideo(machine, host, frame);
+    else {
+        machine.video_ports = host;
+        machine.video_surface = frame;
+    }
     AdvanceMachineVdc(machine, time);
     if (host.sync_audio)
         host.sync_audio(host.context, static_cast<std::uint32_t>(time));
-    int dispmin, dispmax;
-    int ret;
-
-    dispmin =
-        (machine.io.maxline - machine.io.minline > MAXDISP
-             ? machine.io.minline + ((machine.io.maxline - machine.io.minline - MAXDISP + 1) >> 1)
-             : machine.io.minline);
-    dispmax =
-        (machine.io.maxline - machine.io.minline > MAXDISP
-             ? machine.io.maxline - ((machine.io.maxline - machine.io.minline - MAXDISP + 1) >> 1)
-             : machine.io.maxline);
-
-    machine.scanline = (machine.scanline + 1) % machine.frame_lines;
-    if (machine.vdc_mode == rxpce_video::VdcMode::fast)
-        TickFastVdc(machine);
-
-    ret = PceNone;
-    machine.io.vdc_status &= ~VDC_RasHit;
-    if (machine.scanline > machine.io.maxline)
-        machine.io.vdc_status |= VDC_InVBlank;
-
-    if (machine.scanline >= machine.io.minline && machine.scanline <= machine.io.maxline)
-        FlushScrollChange(machine, frame, machine.scanline - 1);
-
-    if (machine.scanline == machine.io.minline) {
-        machine.video.render_frame = !host.begin_frame || host.begin_frame(host.context);
-        machine.io.vdc_status &= ~VDC_InVBlank;
-        machine.video.previous_line = dispmin;
-        machine.video.scroll_y_difference = 0;
-        machine.video.old_scroll_y_difference = 0;
-
-    } else if (machine.scanline == machine.io.maxline) {
-        if (machine.video.render_frame) {
-            FlushVideoRows(machine, frame, dispmax + 1);
-            PresentScreen(machine, host, frame);
-        }
-    }
-    if (machine.scanline >= machine.io.minline && machine.scanline <= machine.io.maxline) {
-        if ((machine.io.vdc[CR].value & 0x01) && rxpce_machine::SpritesCollide(machine)) {
-            machine.io.vdc_status |= VDC_SpHit;
-            ret = PceIrq;
-        }
-        if (machine.scanline == (machine.io.vdc[RCR].value & 1023) - 64) {
-            if ((machine.io.vdc[CR].value & 0x04) && machine.video.render_frame &&
-                dispmin <= machine.scanline && machine.scanline <= dispmax) {
-                FlushVideoRows(machine, frame, machine.scanline);
-            }
-            machine.io.vdc_status |= VDC_RasHit;
-            if ((machine.io.vdc[CR].value & 0x04)) {
-
-                ret = PceIrq;
-            }
-        }
-    } else {
-        int rcr = (machine.io.vdc[RCR].value & 1023) - 64;
-        if (machine.scanline == rcr) {
-
-            if ((machine.io.vdc[CR].value & 0x04)) {
-
-                machine.io.vdc_status |= VDC_RasHit;
-                ret = PceIrq;
-            }
-        }
-    }
-    machine.video.scroll_changed = 0;
-    if (machine.scanline == machine.io.maxline + 1) {
-
-        machine.frame_boundary_pending = true;
-
-        if (ret == PceIrq)
-            machine.io.vdc_pendvsync = 1;
-        else {
-
-            if ((machine.io.vdc[CR].value & 0x08)) {
-
-                ret = PceIrq;
-            }
-        }
-    } else if (machine.io.vdc_pendvsync && ret != PceIrq) {
-        machine.io.vdc_pendvsync = 0;
-
-        if ((machine.io.vdc[CR].value & 0x08)) {
-
-            ret = PceIrq;
-        }
-    }
-    if (ret == PceIrq)
-        machine.io.irq_status |= IRQ1;
 }
-
 void TickMachineTimer(Machine& machine) {
     if (!machine.io.timer_start)
         return;

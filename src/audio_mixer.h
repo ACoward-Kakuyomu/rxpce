@@ -1,6 +1,7 @@
 #pragma once
 #include "psg_state.h"
 #include "psg_synth.h"
+#include "audio_resampler.h"
 
 #include <algorithm>
 #include <array>
@@ -113,14 +114,20 @@ class Mixer {
     std::function<void(float*, std::size_t, unsigned)> extra_source_;
     PsgState state_;
     PsgSynth synth_;
+    BandlimitedBuffer render_;
+    std::array<float, 2> level_{};
     SampleQueue ready_;
     std::vector<float> samples_, extra_samples_;
     AudioClock clock_;
     unsigned rate_ = 44100, channels_ = 2, base_clock_ = 7170000;
     std::size_t capacity_frames_ = 0;
     std::uint64_t remainder_ = 0;
+    std::uint64_t clock_discontinuities_ = 0;
 
   public:
+    std::uint64_t clock_discontinuities() const {
+        return clock_discontinuities_;
+    }
     void set_extra_source(std::function<void(float*, std::size_t, unsigned)> source) {
         extra_source_ = std::move(source);
     }
@@ -133,6 +140,26 @@ class Mixer {
     unsigned rate() const {
         return rate_;
     }
+    unsigned channels() const {
+        return channels_;
+    }
+    std::size_t queued_frames() const {
+        return ready_.queued() / channels_;
+    }
+    void discard_output() {
+        ready_.clear();
+    }
+    BandlimitedBuffer::State filter_state() const {
+        return render_.state();
+    }
+    bool restore_render(const BandlimitedBuffer::State& state, unsigned channels, unsigned base) {
+        if (state.pcm_rate)
+            return false;
+        if (state.rate == rate_ && channels == channels_ && base == base_clock_)
+            return render_.restore(state);
+        seed_render();
+        return true;
+    }
     unsigned base_clock() const {
         return base_clock_;
     }
@@ -141,9 +168,12 @@ class Mixer {
     }
     void restore_phase(const PsgSynth::State& state) {
         synth_.restore_phase(state);
+        level_ = {};
+        synth_.sample(level_.data(), channels_);
     }
     void restore_clock(unsigned rate, unsigned base, std::uint32_t remainder) {
         remainder_ = rate == rate_ && base == base_clock_ && remainder < base ? remainder : 0;
+        seed_render();
     }
     void configure(unsigned rate, unsigned channels, unsigned base_clock, const PsgState& state) {
         if (!rate || !base_clock || (channels != 1 && channels != 2))
@@ -151,6 +181,8 @@ class Mixer {
         rate_ = rate;
         channels_ = channels;
         base_clock_ = base_clock;
+        clock_discontinuities_ = 0;
+        render_.configure(rate);
         capacity_frames_ = (rate * 200u + 999) / 1000;
         ready_.reset(capacity_frames_ * channels);
         samples_.resize(capacity_frames_ * channels);
@@ -162,6 +194,7 @@ class Mixer {
         remainder_ = 0;
         state_ = state;
         synth_.reset(state);
+        seed_render();
         ready_.clear();
     }
     void sync(std::uint32_t cycles) {
@@ -169,10 +202,14 @@ class Mixer {
             return;
         const auto previous = clock_.elapsed();
         if (clock_.update(cycles)) {
+            ++clock_discontinuities_;
             reset(cycles, state_);
             return;
         }
         auto remaining = clock_.elapsed() - previous;
+        const bool fixed_output = synth_.constant_output();
+        if (fixed_output && remaining)
+            synth_.advance(remaining);
         std::size_t used = 0;
         auto flush = [&] {
             if (!used)
@@ -192,12 +229,21 @@ class Mixer {
         while (remaining) {
             const auto to_sample = (base_clock_ - remainder_ + rate_ - 1) / rate_;
             const auto ticks = (std::min)(remaining, to_sample);
-            synth_.advance(ticks);
+            if (!fixed_output)
+                synth_.advance_events(
+                    ticks,
+                    [&](std::uint64_t elapsed, const std::array<float, 2>& level) {
+                        change_level(remainder_ + elapsed * rate_, level);
+                    },
+                    channels_);
             remaining -= ticks;
             remainder_ += ticks * rate_;
             while (remainder_ >= base_clock_) {
                 remainder_ -= base_clock_;
-                synth_.sample(samples_.data() + used * channels_, channels_);
+                const auto level = render_.read();
+                samples_[used * channels_] = level[0];
+                if (channels_ == 2)
+                    samples_[used * channels_ + 1] = level[1];
                 if (++used == capacity_frames_)
                     flush();
             }
@@ -208,13 +254,45 @@ class Mixer {
         sync(cycles);
         state_ = state;
         synth_.update(state);
+        refresh_level();
     }
+    PsgState write(std::uint32_t cycles, unsigned reg, std::uint8_t value) {
+        sync(cycles);
+        synth_.write(reg, value);
+        state_ = synth_.register_state();
+        refresh_level();
+        return state_;
+    }
+
+  private:
+    void refresh_level() {
+        std::array<float, 2> level{};
+        synth_.sample(level.data(), channels_);
+        change_level(remainder_, level);
+    }
+
+  public:
     // Return missing PCM frames; silence is still supplied without advancing devices.
     std::size_t mix(float* out, std::size_t frames) {
         const auto available = ready_.queued() / channels_;
         if (frames)
             ready_.read(out, frames * channels_);
         return frames > available ? frames - available : 0;
+    }
+
+  private:
+    void seed_render() {
+        render_.clear();
+        level_ = {};
+        synth_.sample(level_.data(), channels_);
+        if (capacity_frames_)
+            render_.step(0, double(remainder_) / base_clock_, level_[0], level_[1]);
+    }
+    void change_level(std::uint64_t position, const std::array<float, 2>& level) {
+        render_.step(static_cast<unsigned>(position / base_clock_),
+                     double(position % base_clock_) / base_clock_, double(level[0]) - level_[0],
+                     double(level[1]) - level_[1]);
+        level_ = level;
     }
 };
 } // namespace rxpce_audio

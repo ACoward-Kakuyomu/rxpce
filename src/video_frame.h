@@ -7,6 +7,8 @@
 
 namespace rxpce_video {
 using Pixel = std::uint16_t;
+// Output-only attribute; never stored in VCE color RAM or the 512-entry palette.
+constexpr Pixel monochrome_bit = 0x200;
 using Palette = std::array<std::uint32_t, 512>;
 
 inline Palette linear_palette() {
@@ -49,8 +51,18 @@ inline bool convert_frame(const Pixel* source, int stride, int rows, int x, int 
         return false;
     result.resize(static_cast<std::size_t>(width) * height);
     for (int row = 0; row < height; ++row)
-        for (int col = 0; col < width; ++col)
-            result[row * width + col] = palette[source[(y + row) * stride + x + col] & 511];
+        for (int col = 0; col < width; ++col) {
+            const auto pixel = source[(y + row) * stride + x + col];
+            auto rgb = palette[pixel & 511];
+            if (pixel & monochrome_bit) {
+                // Digital display approximation, applied after the external RGB LUT.
+                const auto level = (299 * (rgb & 255) + 587 * ((rgb >> 8) & 255) +
+                                    114 * ((rgb >> 16) & 255) + 500) /
+                                   1000;
+                rgb = (rgb & 0xff000000u) | level * 0x010101u;
+            }
+            result[row * width + col] = rgb;
+        }
     return true;
 }
 

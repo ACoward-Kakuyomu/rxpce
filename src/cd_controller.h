@@ -15,6 +15,14 @@ class Controller {
     void connect(const Toc* toc, ReadData read, ReadAudio audio = {});
     void configure_audio(unsigned rate);
     void read_audio(float* out, std::size_t frames, unsigned channels);
+    struct AudioStatistics {
+        std::uint64_t requested = 0, unavailable = 0, overwritten = 0, gaps = 0;
+    };
+    AudioStatistics take_audio_statistics() {
+        const auto result = audio_statistics_;
+        audio_statistics_ = {};
+        return result;
+    }
     std::vector<char> save_state() const;
     bool load_state(const char* data, std::size_t size, std::uint64_t cpu_time, std::string& error);
     static std::size_t state_bytes();
@@ -67,11 +75,19 @@ class Controller {
     std::array<std::uint16_t, 2> pcm_latch_{};
     bool cdda_pcm_logged_ = false, adpcm_pcm_logged_ = false;
     rxpce_audio::SampleQueue samples_;
+    AudioStatistics audio_statistics_;
     std::uint64_t generated_frames_ = 0, consumed_frames_ = 0;
-    double area_left_ = 0, area_right_ = 0;
-    std::uint64_t output_previous_ = 0;
+    rxpce_audio::BandlimitedBuffer cdda_render_, adpcm_render_;
+    double native_left_ = 0, native_right_ = 0;
+    float adpcm_render_level_ = 0;
+    std::uint64_t native_due_ = 0, native_previous_ = 0;
+    unsigned native_fraction_ = 44099;
+    std::array<std::array<double, 2>, 256> fade_history_{};
+    unsigned fade_cursor_ = 0;
     unsigned fade_control_ = 0;
     double fade_volume_ = 1;
+    std::uint64_t fade_origin_ = 0;
+    double fade_initial_ = 1;
     void load_audio_sample();
     void tick_cdda();
     void tick_adpcm();
@@ -81,6 +97,11 @@ class Controller {
     void reset_adpcm();
     void integrate(std::uint64_t until);
     void emit_sample();
+    void submit_native_audio();
+    void restart_native_audio();
+    void update_adpcm_audio(unsigned correction = 0, unsigned denominator = 1);
+    std::pair<unsigned, double> audio_position(std::uint64_t time, unsigned correction,
+                                               unsigned denominator) const;
     void ack(bool value);
     void execute();
     void status(bool success);

@@ -6,6 +6,7 @@
 #include "audio_mixer.h"
 #include "audio_stream.h"
 #include "unique_handle.h"
+#include "multimedia_task.h"
 #include <process.h>
 #include <vector>
 #include <utility>
@@ -88,6 +89,11 @@ BOOL clear_buffer() {
 }
 
 unsigned __stdcall play_proc(void*) {
+    rxpce_host::MultimediaTask task(L"Audio");
+    task.set_enabled(true);
+    if (!task.active())
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+    LogDumpDetail("DirectSound multimedia scheduling: mmcss=%d\n", task.active() ? 1 : 0);
     // Stop the looping device buffer even if the worker exits on an error.
     struct StopPlayback {
         ~StopPlayback() {
@@ -138,7 +144,9 @@ BOOL ServiceDSoundBuffer() {
         stream_cursor.reset(capacity, target);
     }
     const auto safe_frame = ((safe_write + frame_bytes - 1) / frame_bytes) % capacity;
-    if (stream_cursor.poll(play / frame_bytes, safe_frame))
+    const bool underrun = stream_cursor.poll(play / frame_bytes, safe_frame);
+    ReportAudioOutput(underrun, false);
+    if (underrun)
         LogDumpDetail("Audio buffer underrun: play=%lu safe=%lu\n", play, safe_write);
     const auto lead = stream_cursor.effective_lead(ds_dwLockSize / frame_bytes);
     if (lead != reported_lead) {
@@ -148,7 +156,13 @@ BOOL ServiceDSoundBuffer() {
                           (ds_nSampleRate * frame_bytes));
         reported_lead = lead;
     }
-    while (const auto frames = stream_cursor.needed(ds_dwLockSize / frame_bytes)) {
+    while (const auto needed = stream_cursor.needed(ds_dwLockSize / frame_bytes)) {
+        const auto frames =
+            stream_cursor.write_ready(ds_dwLockSize / frame_bytes, AvailableMixedAudioFrames());
+        if (frames < needed)
+            ReportAudioOutput(false, true);
+        if (!frames)
+            break;
         next_write = stream_cursor.offset() * frame_bytes;
         if (!WriteDSoundBuffer(frames * frame_bytes))
             return FALSE;
@@ -363,7 +377,6 @@ BOOL StartSound() {
         reinterpret_cast<HANDLE>(_beginthreadex(nullptr, 0, play_proc, nullptr, 0, nullptr)));
     if (!playback_thread)
         return FALSE;
-    SetThreadPriority(playback_thread.get(), THREAD_PRIORITY_ABOVE_NORMAL);
     return TRUE;
 }
 

@@ -44,7 +44,7 @@ rxpce_state::SnapshotRequirements requirements(bool cd) {
     value.flags = cd ? CdStateFlags() : CartridgeFlags();
     value.line_period = machine.cpu.line_period;
     value.timer_period = machine.cpu.timer_period;
-    value.frame_lines = static_cast<unsigned>(machine.frame_lines);
+    value.cpu_clock_hz = machine.cpu_clock_hz;
     value.controllers = static_cast<unsigned>(rxpce_config::active_input.count);
     for (unsigned n = 0; n < 5; ++n)
         value.buttons[n] = static_cast<std::uint8_t>(rxpce_config::active_input.players[n].buttons);

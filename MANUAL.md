@@ -37,6 +37,8 @@ CUEの対応トラックは`AUDIO`、`MODE1/2352`、`MODE1/2048`、参照ファ�
 CDの検証を始める前に現在のエミュレーションを停止します。検証のキャンセルや失敗後は停止状態になるため、続ける場合はイメージを開き直してください。
 5. BIOS画面でRun（初期設定は`Enter`）を押します。
 
+新しい`backup.dat`では、ゲーム内セーブを使う前にBIOS側でバックアップRAMの初期化を求められる場合があります。システムカード3.0では、BIOS画面でSelect（初期設定は`Tab`）を押し、「全体の初期化」を選択します。この操作は共有バックアップRAM内のゲーム内セーブをすべて消去するため、既存データを残す場合は実行しないでください。
+
 対応BIOSは、日本向けSystem Card 1.0／2.0／2.1とSUPER System Card 3.0です。SUPER CD-ROM²には3.0を使用してください。本体256 KiBの対応BIOSを内容で照合します。512バイトのヘッダー付きも受け付けますが、384 KiBのオーバーダンプは受け付けません。BIOS自体は同梱しません。
 
 CUE版とCHD版のステートは共有できません。CHDで問題が出る一方で元のCUEが動く場合は、まず元のCUEで確認してください。特に`PREGAP`と`INDEX 00/01`を併記したCUEは、外部変換時にトラック位置が変わる場合があります。rxpceにイメージの自動修復・CHD変換機能はありません。
@@ -119,7 +121,7 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 | Aspect ratio | Square Pixels（既定）／TV (4:3)。OK時に反映 |
 | Automatic frame skip (60 Hz) | 初期値は有効。約60 Hzを目標に速度を制御し、処理が間に合わないときに描画を追加スキップ |
 | Frame skip (0-15) | 次に描画するまでにスキップする枚数。自動時は最低スキップ枚数、非自動時は固定枚数 |
-| Palette file (empty = linear RGB) | 外部パレット。512色×RGB各1バイト、1536バイト。未指定・サイズ不正・読込み失敗では標準RGBを使用 |
+| Palette file (empty = linear RGB) | 外部パレット。512色×RGB各1バイト、1536バイト。未指定・サイズ不正・読込み失敗では標準RGBを使用。ゲームが白黒出力を選択した場合はパレット適用後のRGBを白黒化 |
 
 **自動フレームスキップを無効にすると速度制限が外れます。** スキップ値0でもゲームが高速に進みます。通常のプレイでは有効にしてください。負荷が高すぎる場合は自動でも通常速度を維持できないことがあります。
 
@@ -139,6 +141,8 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 | Channels | Mono／Stereo。初期値Stereo |
 | Latency (20-160 ms) | 初期値40 ms。小さくすると遅延が減りますが、途切れる場合は大きくして確認 |
 | DirectSound level | DirectSound専用。0: Write primary、1: Exclusive、2: Priority。初期値2 |
+
+Monoは左右の音声の平均です。音声のレート変換による遅延が出力バッファとは別に加わります。追加分は44100 Hzで約0.73 ms、8000 Hzで最大4 msです。Latencyを小さくする場合は、音切れがないか確認してください。
 
 #### Input
 
@@ -166,9 +170,9 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 
 VDC emulationは処理負荷とタイミングモデルの選択です。FastでもAutomatic frame skipが有効なら通常速度（約60 Hz）を維持します。ゲームの表示や動作に差がある場合はAccurateを選び、ゲームを開き直してください。
 
-通常速度の待機周期は仮想フレームのCPUクロック数とBase clockから計算します。初期設定では約60.049 Hzです。固定60 Hzとの差を補正し、長時間再生で音声が徐々に不足することを防ぎます。
+通常速度の待機は、映像時計21,477,270 Hz・1行1365クロックで実際に完了したフレーム時刻に従います。VCEの指定により262行（約60.054 Hz）または263行（約59.826 Hz）となり、途中で行数が変わる場合も時刻の端数を累積します。映像時計はBase clockから独立しています。
 
-Base clockはCPUと各機器の進行に関係する設定です。ホストPCの性能を上げるための項目ではありません。
+Base clockはCPU基準の進行速度を設定します。映像時計との相対速度が変わり、PSG・タイマーの進行にも影響します。CD・音声出力はCPU時刻とこの周波数から実時間へ換算します。通常は初期値を使用してください。ホストPCの性能を上げるための項目ではありません。
 
 ### 7. 保存・復帰とファイルの場所
 
@@ -257,6 +261,8 @@ You may also pass one image path on the command line. Quote paths containing spa
 The current emulation stops before CD validation begins. After cancellation or validation failure, reopen an image to resume playing.
 5. Press Run (`Enter` by default) on the BIOS screen.
 
+A newly created `backup.dat` may require initialization through the BIOS before in-game saves can be used. With System Card 3.0, press Select (`Tab` by default) on the BIOS screen and choose the full initialization option (「全体の初期化」). This erases all in-game saves in the shared backup RAM; do not initialize it when keeping existing data.
+
 Supported BIOS images are the Japanese System Card 1.0, 2.0 and 2.1, and SUPER System Card 3.0. Use 3.0 for SUPER CD-ROM². The emulator checks the contents of supported 256 KiB BIOS images. A 512-byte header is accepted; a 384 KiB overdump is not. BIOS files are not included.
 
 CUE and CHD states cannot be exchanged. If a CHD fails while the original CUE works, check the original CUE first. External conversion of a CUE containing both `PREGAP` and `INDEX 00/01` can change track positions. rxpce does not automatically repair images or convert them to CHD.
@@ -339,7 +345,7 @@ XInput displays slot and connection status, such as `XInput 1 (Connected)`, rath
 | Aspect ratio | Square Pixels (default) / TV (4:3); applies on OK |
 | Automatic frame skip (60 Hz) | Enabled by default; targets approximately 60 Hz and skips additional rendering when behind |
 | Frame skip (0-15) | Frames skipped before the next rendered frame. A minimum in automatic mode, a fixed count otherwise |
-| Palette file (empty = linear RGB) | External palette: 512 RGB entries, 1536 bytes. Empty, invalid-size or unreadable files use standard RGB |
+| Palette file (empty = linear RGB) | External palette: 512 RGB entries, 1536 bytes. Empty, invalid-size or unreadable files use standard RGB. When the game selects monochrome output, grayscale is applied after the RGB palette |
 
 **Disabling automatic frame skip removes the speed limit**, even with frame skip set to zero. Keep it enabled for normal play. Excessive host load can still prevent normal speed.
 
@@ -359,6 +365,8 @@ Both modes use nearest-neighbor sampling. TV scaling is not restricted to source
 | Channels | Mono or Stereo; default Stereo |
 | Latency (20-160 ms) | Default 40 ms. Lower values reduce delay; increase it if audio breaks up |
 | DirectSound level | DirectSound only: 0 Write primary, 1 Exclusive, 2 Priority; default 2 |
+
+Mono averages the left and right signals. Audio rate conversion adds a delay separate from the output buffer: about 0.73 ms at 44100 Hz and up to 4 ms at 8000 Hz. Check for dropouts when reducing Latency.
 
 #### Input
 
@@ -386,9 +394,9 @@ Other relative folder paths use the process working directory. Use a writable ab
 
 VDC emulation selects processing cost and timing behavior. Fast still runs at the normal speed (approximately 60 Hz) when Automatic frame skip is enabled. If a game shows display or behavior differences, select Accurate and reopen the game.
 
-Normal-speed pacing follows the CPU clocks per emulated frame and Base clock, approximately 60.049 Hz at defaults. This corrects the small difference from a fixed 60 Hz limit so audio does not gradually run short during playback.
+Normal-speed pacing follows completed frame timestamps at a video reference of 21,477,270 Hz and 1365 clocks per line. VCE selects 262 lines (about 60.054 Hz) or 263 lines (about 59.826 Hz). Fractional time accumulates across changes in frame length. The video clock is independent of Base clock.
 
-Base clock controls emulated CPU/device timing. It is not a host-PC performance tuning setting.
+Base clock sets CPU-based timing relative to the video clock and also affects PSG/timer progression. CD and audio output convert CPU timestamps to real time using this frequency. Normally leave it at the default. It is not a host-PC performance tuning setting.
 
 ### 7. Save states and file locations
 

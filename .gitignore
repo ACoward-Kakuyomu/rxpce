@@ -87,3 +87,6 @@ xpce.json
 
 # Renamed application settings
 rxpce.json
+
+# Python validation tool caches
+__pycache__/

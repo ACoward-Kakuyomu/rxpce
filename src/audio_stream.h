@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <cstddef>
 
 namespace rxpce_audio {
 
@@ -57,6 +58,8 @@ class PlaybackCursor {
                                   safe_ - played_ + (std::max)(block, max_step_))));
     }
     std::uint32_t needed(std::uint32_t block) const {
+        if (!capacity_)
+            return 0;
         const auto end = played_ + effective_lead(block);
         return written_ >= end ? 0
                                : static_cast<std::uint32_t>(
@@ -64,6 +67,12 @@ class PlaybackCursor {
     }
     void commit(std::uint32_t frames) {
         written_ += frames;
+    }
+    std::uint32_t write_ready(std::uint32_t block, std::size_t available) const {
+        const auto count = needed(block);
+        return written_ > safe_ + max_step_
+                   ? static_cast<std::uint32_t>((std::min)(std::size_t(count), available))
+                   : count;
     }
 };
 

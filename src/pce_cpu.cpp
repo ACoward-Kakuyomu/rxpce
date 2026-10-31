@@ -2,6 +2,7 @@
 #include <cassert>
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
 void ResetPceCpu(PceCpu& state, rxpce_cpu::Bus bus, int line, int timer) {
     assert(line > 0 && timer > 0);
     const auto revision = state.revision + 1;
@@ -24,6 +25,17 @@ void AdvancePceCpuDevices(PceCpu& state, unsigned elapsed, const PceCpuHost& hos
 void SynchronizePceCpuDevices(PceCpu& state, std::uint64_t target, const PceCpuHost& host) {
     assert(state.line_period > 0 && state.timer_period > 0 && state.line_remaining > 0 &&
            state.timer_remaining > 0 && state.device_time <= target && target <= state.cpu.elapsed);
+    auto next_line = [&] {
+        if (!host.line_deadline)
+            return state.line_period;
+        const auto deadline = host.line_deadline(state, host.context);
+        if (deadline <= state.device_time ||
+            deadline - state.device_time > static_cast<unsigned>(state.line_period))
+            throw std::invalid_argument("Invalid absolute scanline deadline");
+        return static_cast<int>(deadline - state.device_time);
+    };
+    if (host.line_deadline)
+        state.line_remaining = next_line();
     while (state.device_time < target || state.line_remaining == 0 || state.timer_remaining == 0) {
         const auto delta = std::min<std::uint64_t>(
             target - state.device_time,
@@ -37,8 +49,10 @@ void SynchronizePceCpuDevices(PceCpu& state, std::uint64_t target, const PceCpuH
             state.timer_remaining = state.timer_period;
             host.timer(state, host.context);
         } else if (state.line_remaining == 0) {
+            // Recompute only after the scanline consumes the old boundary.
             state.line_remaining = state.line_period;
             host.scanline(state, host.context);
+            state.line_remaining = next_line();
         }
     }
 }

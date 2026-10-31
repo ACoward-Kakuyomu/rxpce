@@ -29,8 +29,7 @@ bool InitializeHost(rxpce_machine::Machine& machine) {
     } catch (const std::bad_alloc&) {
         return false;
     }
-    InitializeFrameTiming(static_cast<unsigned>(machine.line_period) * machine.frame_lines,
-                          static_cast<unsigned>(rxpce_host::runtime.base_clock_hz));
+    InitializeFrameTiming(rxpce_video::vce_line_ticks * 262, rxpce_video::video_master_hz);
     InitSound(rxpce_host::runtime.sound, hwnd, rxpce_audio::snapshot_psg(machine.io));
     InitDInput();
     InitInfo();

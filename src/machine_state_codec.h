@@ -5,6 +5,7 @@
 #include "video_frame.h"
 #include "audio_state.h"
 #include "vdc_state_codec.h"
+#include "video_clock_state.h"
 namespace rxpce_machine {
 class Machine;
 struct FrameSurface;
@@ -16,7 +17,9 @@ namespace rxpce_state {
 namespace machine_wire {
 constexpr std::size_t ram = 0, vram = 8192, sprites = 139264, palette = 139776, scanline = 140800;
 constexpr std::size_t io = 140804, backup = io + io_wire::size, bank = backup + 2048,
-                      cpu = bank + 1, vdc = cpu + cpu_state_size, base_size = vdc + vdc_state_bytes;
+                      cpu = bank + 1, vdc = cpu + cpu_state_size,
+                      video_clock = vdc + vdc_state_bytes,
+                      base_size = video_clock + video_clock_state_bytes;
 } // namespace machine_wire
 struct MachineSnapshot {
     std::array<std::uint8_t, 8192> ram{};
@@ -30,13 +33,15 @@ struct MachineSnapshot {
     PceCpu cpu;
     rxpce_audio::PsgPhaseState sound;
     VdcSnapshot vdc;
+    VideoClockSnapshot video_clock;
     std::array<std::uint8_t, 32768> populous{};
 };
 struct SnapshotRequirements {
     rxpce_video::VdcMode vdc_mode = rxpce_video::VdcMode::accurate;
     std::uint32_t flags = 0;
     int line_period = 1, timer_period = 1;
-    unsigned frame_lines = 263, controllers = 1;
+    std::uint32_t cpu_clock_hz = 7170000;
+    unsigned controllers = 1;
     std::array<std::uint8_t, 5> buttons{{2, 2, 2, 2, 2}};
 };
 constexpr std::size_t machine_state_bytes(std::uint32_t flags) {

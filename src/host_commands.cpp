@@ -10,6 +10,9 @@
 #include "log.h"
 #include <atomic>
 #include <cstdio>
+#ifdef SOUND
+#include "Sound.h"
+#endif
 
 namespace {
 std::atomic_bool stop_requested{false};
@@ -51,6 +54,9 @@ bool PollHostCommands(rxpce_machine::Machine& machine) {
     }
     if (commands & EV_AUTOFRAMESKIP) {
         rxpce_host::runtime.auto_frame_skip = !rxpce_host::runtime.auto_frame_skip;
+#ifdef SOUND
+        DiscardSoundOutput(machine.cpu.cycles());
+#endif
         changed = true;
     }
     if (changed) {

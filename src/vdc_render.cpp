@@ -61,30 +61,33 @@ std::uint32_t SpriteRowMask(const Machine& machine, const Sprite& sprite, int ro
     return (sprite.atr & 0x800) ? ReverseBits(mask) >> (32 - width) : mask;
 }
 } // namespace
-bool SpritesCollide(const Machine& machine) {
-    const int row = machine.scanline;
-    if (!machine.graphics.vram() || machine.io.screen_w <= 0 || row < machine.io.minline ||
-        row > machine.io.maxline)
+rxpce_video::SpriteLinePlan EvaluateMachineSprites(const Machine& machine, int row) {
+    const auto& a = machine.vdc.scan.state().active;
+    return rxpce_video::EvaluateSpriteLine(
+        machine.video.sprites, row, rxpce_video::SpriteLimitsFromRegisters(a.hsr, a.hdr, a.memory));
+}
+bool SpritesCollide(const Machine& machine, const rxpce_video::SpriteLinePlan& plan,
+                    const SpriteDisplay& display) {
+    const int row = display.row;
+    if (!machine.graphics.vram() || display.width <= 0 || row < display.first || row > display.last)
         return false;
     const auto first = ReadSprite(machine, 0);
     const int x0 = (first.x & 1023) - 32, w0 = SpriteWidth(first);
-    if (x0 >= machine.io.screen_w || x0 + w0 <= 0)
-        return false;
-    const auto mask0 = SpriteRowMask(machine, first, row);
+    const auto full0 = SpriteRowMask(machine, first, row);
+    std::uint32_t mask0 = 0;
+    for (unsigned i = 0; i < plan.count; ++i)
+        if (plan.cells[i].satb_index == 0)
+            mask0 |= full0 & (0xffffu << (plan.cells[i].screen_cell * 16));
     if (!mask0)
         return false;
-    int remaining = 16 - w0 / 16;
-    for (unsigned i = 1; i < 64 && remaining; ++i) {
-        const auto spr = ReadSprite(machine, i);
-        const int y = (spr.y & 1023) - 64;
-        if (row < y || row >= y + SpriteHeight(spr))
+    for (unsigned i = 0; i < plan.count; ++i) {
+        const auto cell = plan.cells[i];
+        if (!cell.satb_index)
             continue;
-        const int cells = std::min(remaining, SpriteWidth(spr) / 16);
-        remaining -=
-            cells; // Y selection consumes cells even when X is offscreen or pixels are zero.
+        const auto spr = ReadSprite(machine, cell.satb_index);
         const int x = (spr.x & 1023) - 32;
-        const int left = std::max({0, x0, x});
-        const int end = std::min({machine.io.screen_w, x0 + w0, x + cells * 16});
+        const int left = std::max({0, x0, x + int(cell.screen_cell) * 16});
+        const int end = std::min({display.width, x0 + w0, x + (int(cell.screen_cell) + 1) * 16});
         if (left >= end)
             continue;
         const auto overlap = static_cast<std::uint32_t>((std::uint64_t{1} << (end - left)) - 1);
@@ -94,7 +97,6 @@ bool SpritesCollide(const Machine& machine) {
     }
     return false;
 }
-
 static void DecodeBackgroundTile(Machine& machine, int no) {
     rxpce_machine::background_pixels(machine.graphics.vram() + no * 32,
                                      machine.graphics.background() + no * 8);
@@ -109,9 +111,11 @@ static void DecodeSpriteTile(Machine& machine, int no) {
 #define FC_W machine.io.screen_w
 #define FC_H 256
 
-void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2) {
+void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2,
+                      const BackgroundRegisters& registers) {
     CheckFrame(machine, frame);
-    if (Y1 < 0 || Y1 > 256 || Y2 >= 256)
+    if (Y1 - machine.video.row_bias < 0 || Y1 - machine.video.row_bias > 256 ||
+        Y2 - machine.video.row_bias >= 256)
         throw std::invalid_argument("Invalid background rows");
     if (Y2 < Y1 || machine.io.screen_w == 0)
         return;
@@ -122,23 +126,23 @@ void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2) {
 
     Y2++;
     PP = frame.pixels + render_stride * (render_rows - FC_H) / 2 + (render_stride - FC_W) / 2 +
-         render_stride * Y1;
+         render_stride * (Y1 - machine.video.row_bias);
 
-    if ((machine.io.vdc[CR].value & 0x80) && machine.video.background_enabled) {
+    if ((registers.control & 0x80) && machine.video.background_enabled) {
 
-        y = Y1 + machine.io.vdc[BYR].value - machine.video.scroll_y_difference;
+        y = Y1 + registers.y_offset;
         offset = y & 7;
         h = 8 - offset;
         if (h > Y2 - Y1)
             h = Y2 - Y1;
         y >>= 3;
-        PP -= machine.io.vdc[BXR].value & 7;
+        PP -= registers.x_scroll & 7;
         XW = machine.io.screen_w / 8 + 1;
-        Shift = machine.io.vdc[BXR].value & 7;
+        Shift = registers.x_scroll & 7;
 
         for (Line = Y1; Line < Y2; y++) {
 
-            x = machine.io.vdc[BXR].value / 8;
+            x = registers.x_scroll / 8;
             y &= machine.io.bg_h - 1;
             for (X1 = 0; X1 < XW; X1++, x++, PP += 8) {
                 rxpce_video::Pixel *R, *P;
@@ -561,103 +565,58 @@ static void PutSpriteHflipMakeMask(rxpce_video::Pixel* output, const byte* sourc
     }
 }
 
-void RenderSprites(Machine& machine, FrameSurface frame, int Y1, int Y2, unsigned bg) {
+void RenderSpriteLine(Machine& machine, FrameSurface frame, int row, unsigned bg,
+                      const rxpce_video::SpriteLinePlan& plan) {
     CheckFrame(machine, frame);
-    if (Y1 < 0 || Y2 > 256 || Y2 < 0 || Y1 > 256 || bg > 1)
-        throw std::invalid_argument("Invalid sprite rows");
-    if (Y2 <= Y1 || machine.io.screen_w == 0)
-        return;
-    int n;
-
-    if (bg == 0)
-        machine.video.uses_sprite_priority = 0;
-
-    for (n = 0; n < 64; n++) {
-        const auto spr = ReadSprite(machine, static_cast<unsigned>(63 - n));
-        int x, y, no, atr, inc, cgx, cgy;
-        rxpce_video::Pixel* R;
-        byte* C;
-        std::uint32_t* C2;
-        int pos;
-        int h, i, j;
-        unsigned spbg;
-
-        atr = spr.atr;
-        spbg = static_cast<unsigned>((atr >> 7) & 1);
-        const auto priority = static_cast<byte>(n);
-        if (spbg != bg)
+    if (row - machine.video.row_bias < 0 || row - machine.video.row_bias >= 256 || bg > 1)
+        throw std::invalid_argument("Invalid sprite row");
+    for (unsigned i = plan.count; i > 0; --i) {
+        const auto cell = plan.cells[i - 1];
+        const auto spr = ReadSprite(machine, cell.satb_index);
+        const unsigned attr = static_cast<std::uint16_t>(spr.atr);
+        if (((attr >> 7) & 1) != bg)
             continue;
-        y = (spr.y & 1023) - 64;
-        x = (spr.x & 1023) - 32;
-        no = spr.no & 2047;
-        cgx = (atr >> 8) & 1;
-        cgy = (atr >> 12) & 3;
-        cgy |= cgy >> 1;
-        no = (no >> 1) & ~(cgy * 2 + cgx);
-        if (y >= Y2 || y + (cgy + 1) * 16 < Y1 || x >= FC_W || x + (cgx + 1) * 16 < 0)
+        const int sprite_x = (spr.x & 1023) - 32;
+        if (sprite_x >= machine.io.screen_w || sprite_x + SpriteWidth(spr) <= 0)
             continue;
-
-        R = &SPal[(atr & 15) * 16];
-        for (i = 0; i < cgy * 2 + cgx + 1; i++) {
-            if (machine.graphics.sprite_dirty()[no + i]) {
-                machine.graphics.sprite_dirty()[no + i] = 0;
-                DecodeSpriteTile(machine, no + i);
-            }
-            if (!cgx)
-                i++;
+        const int x = sprite_x + cell.screen_cell * 16;
+        const unsigned alignment = (SpriteHeight(spr) / 16 - 1) * 2 + (SpriteWidth(spr) / 16 - 1);
+        const unsigned tile =
+            (((spr.no & 2047) >> 1) & ~alignment) + (cell.row / 16) * 2 + cell.source_cell;
+        if (machine.graphics.sprite_dirty()[tile]) {
+            machine.graphics.sprite_dirty()[tile] = 0;
+            DecodeSpriteTile(machine, tile);
         }
-        inc = (atr & V_FLIP) ? -2 : 2;
-
-        for (i = 0; i <= cgy; i++) {
-            const int top = y + i * 16;
-            const int first = std::max(Y1, top), end = std::min(Y2, top + 16);
-            if (first >= end)
-                continue;
-            const int block = (atr & V_FLIP) ? cgy - i : i;
-            const int row = (atr & V_FLIP) ? 15 - (first - top) : first - top;
-            C = machine.graphics.vram() + no * 128 + block * 256 + row * 2;
-            C2 = machine.graphics.sprites() + no * 32 + block * 64 + row * 2;
-            pos = (render_stride - FC_W) / 2 + render_stride * first + x;
-            h = end - first;
-            if (spbg == 0) {
-                machine.video.uses_sprite_priority = 1;
-                if (atr & H_FLIP) {
-                    for (j = 0; j <= cgx; j++)
-                        PutSpriteHflipMakeMask(
-                            frame.pixels + pos + (cgx - j) * 16, C + j * 128, C2 + j * 32, R, h,
-                            inc, machine.video.priority.data() + pos + (cgx - j) * 16, priority);
-                } else {
-                    for (j = 0; j <= cgx; j++)
-                        PutSpriteMakeMask(frame.pixels + pos + j * 16, C + j * 128, C2 + j * 32, R,
-                                          h, inc, machine.video.priority.data() + pos + j * 16,
-                                          priority);
-                }
-            } else if (machine.video.uses_sprite_priority) {
-                if (atr & H_FLIP) {
-                    for (j = 0; j <= cgx; j++)
-                        PutSpriteHflipM(
-                            frame.pixels + pos + (cgx - j) * 16, C + j * 128, C2 + j * 32, R, h,
-                            inc, machine.video.priority.data() + pos + (cgx - j) * 16, priority);
-                } else {
-                    for (j = 0; j <= cgx; j++)
-                        PutSpriteM(frame.pixels + pos + j * 16, C + j * 128, C2 + j * 32, R, h, inc,
-                                   machine.video.priority.data() + pos + j * 16, priority);
-                }
-            } else {
-                if (atr & H_FLIP) {
-                    for (j = 0; j <= cgx; j++)
-                        PutSpriteHflip(frame.pixels + pos + (cgx - j) * 16, C + j * 128,
-                                       C2 + j * 32, R, h, inc);
-                } else {
-                    for (j = 0; j <= cgx; j++)
-                        PutSprite(frame.pixels + pos + j * 16, C + j * 128, C2 + j * 32, R, h, inc);
-                }
-            }
+        auto* C = machine.graphics.vram() + tile * 128 + (cell.row % 16) * 2;
+        auto* C2 = machine.graphics.sprites() + tile * 32 + (cell.row % 16) * 2;
+        auto* R = &SPal[(attr & 15) * 16];
+        const auto pos = (row - machine.video.row_bias) * render_stride +
+                         (render_stride - machine.io.screen_w) / 2 + x;
+        auto* P = frame.pixels + pos;
+        auto* M = machine.video.priority.data() + pos;
+        const auto priority = static_cast<byte>(63 - cell.satb_index);
+        if (bg == 0) {
+            machine.video.uses_sprite_priority = 1;
+            if (attr & H_FLIP)
+                PutSpriteHflipMakeMask(P, C, C2, R, 1, 2, M, priority);
+            else
+                PutSpriteMakeMask(P, C, C2, R, 1, 2, M, priority);
+        } else if (machine.video.uses_sprite_priority) {
+            if (attr & H_FLIP)
+                PutSpriteHflipM(P, C, C2, R, 1, 2, M, priority);
+            else
+                PutSpriteM(P, C, C2, R, 1, 2, M, priority);
+        } else {
+            if (attr & H_FLIP)
+                PutSpriteHflip(P, C, C2, R, 1, 2);
+            else
+                PutSprite(P, C, C2, R, 1, 2);
         }
     }
 }
-
 void ClearVideoRows(Machine& machine, FrameSurface frame, int first, int last) {
+    first -= machine.video.row_bias;
+    last -= machine.video.row_bias;
     if (!frame.pixels || frame.count < frame_width * frame_height || first < 0 || first > 256 ||
         last >= 256)
         throw std::invalid_argument("Invalid video clear range");

@@ -4,6 +4,7 @@
 #include "frame_timing.h"
 #include "log.h"
 #include "unique_handle.h"
+#include "multimedia_task.h"
 #include <chrono>
 
 namespace {
@@ -42,10 +43,14 @@ void InitializeFrameTiming(unsigned frame_cycles, unsigned clock_hz) {
     if (!timer)
         timer.reset(CreateWaitableTimer(nullptr, FALSE, nullptr));
 }
-bool BeginVideoFrame(int minimum_skip, bool automatic) {
+bool BeginVideoFrame(int minimum_skip, bool automatic, std::uint64_t completed_master_time) {
+    thread_local rxpce_host::MultimediaTask task(L"Games");
+    if (task.set_enabled(automatic))
+        LogDumpDetail("Producer multimedia scheduling: auto=%d mmcss=%d\n", automatic ? 1 : 0,
+                      task.active() ? 1 : 0);
     auto now = now_ns();
-    for (auto delay = scheduler.wait_ns(now, automatic); delay > 0;
-         delay = scheduler.wait_ns(now, automatic)) {
+    for (auto delay = scheduler.wait_ns(now, automatic, completed_master_time); delay > 0;
+         delay = scheduler.wait_ns(now, automatic, completed_master_time)) {
         LARGE_INTEGER due;
         due.QuadPart = -((delay + 99) / 100);
         if (!timer || !SetWaitableTimer(timer.get(), &due, 0, nullptr, nullptr, FALSE) ||
@@ -53,7 +58,7 @@ bool BeginVideoFrame(int minimum_skip, bool automatic) {
             Sleep(static_cast<DWORD>((delay + 999999) / 1000000));
         now = now_ns();
     }
-    const bool draw = scheduler.begin(now, minimum_skip, automatic);
+    const bool draw = scheduler.begin(now, minimum_skip, automatic, completed_master_time);
     if (sample_skip != minimum_skip || sample_auto != automatic) {
         sample_start = 0;
         frames = render_slots = 0;
