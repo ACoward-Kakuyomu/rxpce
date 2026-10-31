@@ -4,6 +4,7 @@
 #include <string>
 #include <filesystem>
 #include "video_frame.h"
+#include "video_presenter.h"
 
 constexpr UINT WM_VIDEO_INITIALIZE = WM_APP + 4;
 constexpr UINT WM_VIDEO_SIZE = WM_APP + 7;
@@ -19,6 +20,7 @@ extern VideoSettings video_settings; // UI thread only, except during startup/sh
 BOOL InitializeVideo();
 void PrepareVideoWindow();
 void ShutdownVideo();
+rxpce_video::PresentationStatistics TakeVideoPresentationStatistics();
 BOOL ResetVideoToIdle();
 bool SetFullscreenCursor(int hit_test, bool dialog_open);
 void PresentVideo(const rxpce_video::Pixel* pixels, int stride, int rows, int x, int y, int width,

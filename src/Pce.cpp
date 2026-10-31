@@ -38,6 +38,7 @@ using rxpce_machine::vdc::IRQ2;
 #endif // SOUND
 #include "info.h"
 #include "log.h"
+#include "video.h"
 
 #ifndef TRUE
 #define TRUE 1
@@ -67,7 +68,7 @@ namespace {
 using AudioWallClock = std::chrono::steady_clock;
 struct NativeAudioProbe {
     std::uint64_t data_us = 0, cdda_us = 0, log_us = 0;
-    std::uint64_t wait_us = 0, present_us = 0;
+    std::uint64_t wait_us = 0, enqueue_us = 0;
 } native_audio_probe;
 std::uint64_t audio_elapsed_us(AudioWallClock::time_point begin) {
     return static_cast<std::uint64_t>(
@@ -97,16 +98,19 @@ rxpce_machine::DeviceHost& NativeDevices() {
                               cd.requested, cd.unavailable, cd.overwritten, cd.gaps);
             }
             const auto probe = native_audio_probe;
+            const auto video = TakeVideoPresentationStatistics();
             native_audio_probe = {};
             const auto begin = AudioWallClock::now();
             LogDumpDetail("Audio queue: requested=%llu missing=%llu events=%llu frames\n"
                           "%sAudio output: empty=%llu deferred=%llu\n"
                           "Audio timing: sync_us=%llu gap_us=%llu write_us=%llu data_us=%llu "
-                          "cdda_us=%llu log_us=%llu resets=%llu wait_us=%llu present_us=%llu\n",
+                          "cdda_us=%llu log_us=%llu resets=%llu wait_us=%llu present_us=%llu\n"
+                          "Video presentation: enqueue_us=%llu replaced=%llu\n",
                           stats.requested, stats.missing, stats.events, cd_record,
                           stats.output_empty, stats.deferred, stats.sync_us, stats.gap_us,
                           stats.write_us, probe.data_us, probe.cdda_us, probe.log_us,
-                          stats.clock_resets, probe.wait_us, probe.present_us);
+                          stats.clock_resets, probe.wait_us, video.present_us, probe.enqueue_us,
+                          video.replaced);
             native_audio_probe.log_us = audio_elapsed_us(begin);
         };
 #endif
@@ -123,8 +127,8 @@ rxpce_machine::DeviceHost& NativeDevices() {
                            rxpce_machine::DisplayRectangle area) {
             const auto begin = AudioWallClock::now();
             rxpce_host::PresentFrame(frame, area);
-            native_audio_probe.present_us =
-                (std::max)(native_audio_probe.present_us, audio_elapsed_us(begin));
+            native_audio_probe.enqueue_us =
+                (std::max)(native_audio_probe.enqueue_us, audio_elapsed_us(begin));
         };
         value.controller_read = [](void* context, std::uint8_t input) {
             auto& machine = *static_cast<Machine*>(context);

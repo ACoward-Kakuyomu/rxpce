@@ -12,7 +12,8 @@ VideoSettings video_settings;
 namespace {
 rxpce_video::Renderer renderer;
 rxpce_video::Palette palette;
-std::vector<std::uint32_t> frame;
+rxpce_video::PresentationFrame frame;
+std::unique_ptr<rxpce_video::FramePresenter> presenter;
 struct PresentationOptions {
     int zoom = 1;
     rxpce_video::AspectMode mode = rxpce_video::AspectMode::square_pixels;
@@ -24,11 +25,12 @@ LONG_PTR saved_style = 0;
 LONG_PTR saved_exstyle = 0;
 HMENU saved_menu = nullptr;
 int last_width = 0, last_height = 0; // Emulation thread only.
-bool device_lost = false;
+bool device_lost = false;            // Presentation worker only while active.
 HRESULT last_error = S_OK;
 } // namespace
 
 BOOL InitializeVideo() {
+    presenter.reset();
     last_width = last_height = 0;
     device_lost = false;
     last_error = S_OK;
@@ -47,6 +49,33 @@ BOOL InitializeVideo() {
         MessageBoxA(hwnd, message, "rxpce", MB_OK | MB_ICONERROR);
         return FALSE;
     }
+    const int adapter = video_settings.adapter;
+    try {
+        presenter = std::make_unique<rxpce_video::FramePresenter>(
+            [adapter](const rxpce_video::PresentationFrame& image) {
+                if (device_lost) {
+                    if (FAILED(renderer.initialize(hwnd, adapter)))
+                        return;
+                    device_lost = false;
+                }
+                const HRESULT status =
+                    renderer.render(image.pixels.data(), image.width, image.height, image.scale,
+                                    true, image.nonblocking, image.aspect_mode);
+                if (FAILED(status) && status != last_error)
+                    LogDumpDetail("D3D11 render failed: %08lX\n",
+                                  static_cast<unsigned long>(status));
+                last_error = status;
+                if (status == DXGI_ERROR_DEVICE_REMOVED || status == DXGI_ERROR_DEVICE_RESET) {
+                    LogDumpDetail("D3D11 device lost, retrying next frame: %08lX\n",
+                                  static_cast<unsigned long>(status));
+                    device_lost = true;
+                }
+            });
+    } catch (const std::exception& error) {
+        LogDumpDetail("D3D11 presentation worker failed: %s\n", error.what());
+        renderer.shutdown();
+        return FALSE;
+    }
     LogDumpDetail("D3D11 initialized, adapter=%d zoom=%d\n", video_settings.adapter,
                   video_settings.zoom);
     return TRUE;
@@ -58,8 +87,14 @@ void PrepareVideoWindow() {
 }
 
 void ShutdownVideo() {
+    // Emulation has already joined. Drain synchronous window messages while joining D3D.
+    presenter.reset();
     renderer.shutdown();
-    frame.clear();
+    frame = {};
+}
+
+rxpce_video::PresentationStatistics TakeVideoPresentationStatistics() {
+    return presenter ? presenter->take_statistics() : rxpce_video::PresentationStatistics{};
 }
 
 BOOL ResetVideoToIdle() {
@@ -68,9 +103,12 @@ BOOL ResetVideoToIdle() {
     UpdateWindow(hwnd);
     if (!InitializeVideo())
         return FALSE;
-    frame.assign(320 * 240, 0xff000000u);
-    return SUCCEEDED(renderer.render(frame.data(), 320, 240, video_settings.zoom, true, false,
-                                     video_settings.aspect_mode));
+    frame.pixels.assign(320 * 240, 0xff000000u);
+    frame.width = 320;
+    frame.height = 240;
+    frame.scale = video_settings.zoom;
+    frame.aspect_mode = video_settings.aspect_mode;
+    return presenter->submit(frame) ? TRUE : FALSE;
 }
 
 bool SetFullscreenCursor(int hit_test, bool dialog_open) {
@@ -82,30 +120,23 @@ bool SetFullscreenCursor(int hit_test, bool dialog_open) {
 
 void PresentVideo(const rxpce_video::Pixel* pixels, int stride, int rows, int x, int y, int width,
                   int height, bool nonblocking) {
-    if (!rxpce_video::convert_frame(pixels, stride, rows, x, y, width, height, palette, frame))
+    if (!rxpce_video::convert_frame(pixels, stride, rows, x, y, width, height, palette,
+                                    frame.pixels))
         return;
     if (last_width != width || last_height != height) {
         last_width = width;
         last_height = height;
         PostMessage(hwnd, WM_VIDEO_SIZE, width, height);
     }
-    DisplayInfo(frame.data(), width, height);
-    if (device_lost) {
-        if (FAILED(renderer.initialize(hwnd, video_settings.adapter)))
-            return;
-        device_lost = false;
-    }
+    DisplayInfo(frame.pixels.data(), width, height);
     const auto options = presentation.load();
-    const HRESULT hr = renderer.render(frame.data(), width, height, bFullScreen ? 0 : options.zoom,
-                                       true, nonblocking, options.mode);
-    if (FAILED(hr) && hr != last_error)
-        LogDumpDetail("D3D11 render failed: %08lX\n", static_cast<unsigned long>(hr));
-    last_error = hr;
-    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
-        LogDumpDetail("D3D11 device lost, retrying next frame: %08lX\n",
-                      static_cast<unsigned long>(hr));
-        device_lost = true;
-    }
+    frame.width = width;
+    frame.height = height;
+    frame.scale = bFullScreen ? 0 : options.zoom;
+    frame.aspect_mode = options.mode;
+    frame.nonblocking = nonblocking;
+    if (presenter)
+        presenter->submit(frame);
 }
 
 void ResizeVideoWindow(int width, int height) {

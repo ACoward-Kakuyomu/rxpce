@@ -49,7 +49,7 @@ target_link_libraries(cue_materialize PRIVATE cartridge)
 
 add_executable(rxpce WIN32
     src/settings.cpp src/settings_dialog.cpp src/AboutDlg.cpp src/archive.cpp src/video.cpp src/debug.cpp src/frame_timing.cpp
-    src/di.cpp src/ds.cpp src/wasapi.cpp src/video_info.cpp src/log.cpp src/d3d11_renderer.cpp
+    src/di.cpp src/ds.cpp src/wasapi.cpp src/video_info.cpp src/log.cpp src/d3d11_renderer.cpp src/video_presenter.cpp
     src/MainFrame.cpp src/Pce.cpp src/Sound.cpp src/cd_prepare_dialog.cpp src/state_service.cpp src/machine_runtime.cpp
     src/host_input.cpp src/host_commands.cpp src/host_runtime.cpp src/rxpce.cpp src/rxpce.rc)
 target_compile_features(rxpce PRIVATE cxx_std_17)

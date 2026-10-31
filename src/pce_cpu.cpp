@@ -88,6 +88,14 @@ PceCpuResult RunPceCpu(PceCpu& state, const PceCpuHost& host) {
                    return x.host.bus.ready ? x.host.bus.ready(a, w, x.host.bus.context) : 0;
                }};
     }
+    bus.synchronize_prefix = [](std::uint64_t t, void* p) {
+        auto& x = *static_cast<Access*>(p);
+        if (t > x.cpu.device_time)
+            SynchronizePceCpuDevices(x.cpu, t, x.host);
+        if (x.host.bus.synchronize_prefix)
+            x.host.bus.synchronize_prefix(t, x.host.bus.prefix_context);
+    };
+    bus.prefix_context = &access;
     rxpce_cpu::HuC6280 cpu(bus, state.cpu);
     bool clock_ready = false;
     for (;;) {

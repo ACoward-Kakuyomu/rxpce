@@ -20,16 +20,19 @@ std::uint8_t HuC6280::read(std::uint16_t a) {
     bus_wait(p, false);
     return bus_.read(p, bus_.context);
 }
-void HuC6280::write_physical(std::uint32_t p, std::uint8_t value) {
-    bus_wait(p, true);
+void HuC6280::write_physical(std::uint32_t p, std::uint8_t value, unsigned base_cycle) {
+    bus_wait(p, true, base_cycle);
     bus_.write(p, value, bus_.context);
 }
-void HuC6280::bus_wait(std::uint32_t physical, bool write) {
+void HuC6280::bus_wait(std::uint32_t physical, bool write, unsigned base_cycle) {
     auto sync = [&] {
-        if (in_step_ && (bus_.synchronize || bus_.ready)) {
-            state_.elapsed = instruction_time_ + std::uint64_t(waits_) * instruction_divisor_;
+        if (in_step_ && (bus_.synchronize || bus_.ready || base_cycle)) {
+            state_.elapsed =
+                instruction_time_ + (std::uint64_t(base_cycle) + waits_) * instruction_divisor_;
             if (bus_.synchronize)
                 bus_.synchronize(state_.elapsed, bus_.context);
+            else if (base_cycle && bus_.synchronize_prefix)
+                bus_.synchronize_prefix(state_.elapsed, bus_.prefix_context);
         }
     };
     sync();
@@ -44,8 +47,8 @@ void HuC6280::bus_wait(std::uint32_t physical, bool write) {
         }
     }
 }
-void HuC6280::write(std::uint16_t a, std::uint8_t v) {
-    write_physical(physical(a), v);
+void HuC6280::write(std::uint16_t a, std::uint8_t v, unsigned base_cycle) {
+    write_physical(physical(a), v, base_cycle);
 }
 std::uint16_t HuC6280::word(std::uint16_t a) {
     const unsigned lo = read(a);
@@ -68,16 +71,19 @@ void HuC6280::nz(std::uint8_t v) {
 }
 std::uint8_t HuC6280::read_base(std::uint16_t a, void* p) {
     auto& self = *static_cast<HuC6280*>(p);
+    // These substitutions belong to one delegated fetch each. A later data or
+    // stack read at the same address must reach the real bus (including waits).
     if (self.cached_opcode_ >= 0 && a == self.state_.pc)
-        return std::uint8_t(self.cached_opcode_);
+        return std::uint8_t(std::exchange(self.cached_opcode_, -1));
     if (self.injected_operand_ >= 0 && a == std::uint16_t(self.state_.pc + 1))
-        return std::uint8_t(self.injected_operand_);
+        return std::uint8_t(std::exchange(self.injected_operand_, -1));
     return self.read(a);
 }
 void HuC6280::write_base(std::uint16_t a, std::uint8_t v, void* p) {
-    static_cast<HuC6280*>(p)->write(a, v);
+    auto& self = *static_cast<HuC6280*>(p);
+    self.write(a, v, self.delegated_write_cycle_);
 }
-bool HuC6280::delegate(std::uint8_t opcode, int operand) {
+bool HuC6280::delegate(std::uint8_t opcode, int operand, unsigned write_cycle) {
     auto& s = state_;
     base_.a = s.a;
     base_.x = s.x;
@@ -87,8 +93,10 @@ bool HuC6280::delegate(std::uint8_t opcode, int operand) {
     base_.pc = s.pc;
     cached_opcode_ = opcode;
     injected_operand_ = operand;
+    delegated_write_cycle_ = write_cycle;
     const auto result = MCS6502ExecNext(&base_);
     cached_opcode_ = injected_operand_ = -1;
+    delegated_write_cycle_ = 0;
     s.a = base_.a;
     s.x = base_.x;
     s.y = base_.y;
@@ -227,7 +235,7 @@ unsigned HuC6280::alu(std::uint8_t op) {
     const bool transfer = (s.p & T) && (group <= 3 || group == 7);
     s.p &= ~T;
     if (group == 4) {
-        write(address, s.a);
+        write(address, s.a, cycles);
     } else {
         const auto operand = read(address);
         const auto saved_a = s.a;
@@ -431,7 +439,7 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
     case 0x13:
     case 0x23: {
         const auto value = read(std::uint16_t(pc + 1));
-        write_physical(0x1fe000 + (op == 3 ? 0 : op == 0x13 ? 2 : 3), value);
+        write_physical(0x1fe000 + (op == 3 ? 0 : op == 0x13 ? 2 : 3), value, 4);
         s.pc = std::uint16_t(pc + 2);
         return 4;
     }
@@ -532,7 +540,7 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
             address = 0x2000 + std::uint8_t(address + s.x);
         if (op == 0x9e)
             address = std::uint16_t(address + s.x);
-        write(address, 0);
+        write(address, 0, (op & 8) ? 5 : 4);
         s.pc = std::uint16_t(pc + ((op & 8) ? 3 : 2));
         return (op & 8) ? 5 : 4;
     }
@@ -584,7 +592,12 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
     case 0xf3:
         return transfer(op);
     }
-    if (!delegate(op)) {
+    // Only ordinary STX/STY delegate a write at the instruction's trailing edge.
+    // RMW, stack and all reads retain their separately documented models.
+    const unsigned write_cycle = op == 0x8c || op == 0x8e                               ? 5
+                                 : op == 0x84 || op == 0x94 || op == 0x86 || op == 0x96 ? 4
+                                                                                        : 0;
+    if (!delegate(op, -1, write_cycle)) {
         s.p = old_p;
         valid = false;
         return 0;

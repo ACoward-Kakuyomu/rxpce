@@ -202,6 +202,8 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
+CPUの命令取得・アクセス時刻の改善でも、Accurate/FastそれぞれのHuCard/CD形式GUIDを更新しています。この変更前のステートは読み込めないため、更新後はゲームを新規起動してステートを作成してください。
+
 更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.fst0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
 
 設定だけを初期化する場合は、終了後に`rxpce.json`を別名で退避して起動します。正常終了時に新しい設定ファイルを保存します。ゲーム内セーブを残す場合は`backup.dat`や`.ram`を削除しないでください。旧`xpce.ini`／`xpce.json`は自動読込みしません。
@@ -425,6 +427,8 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 ### 8. Updating and resetting settings
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
+
+CPU instruction-fetch and access-timing improvements also update the HuCard/CD format GUIDs for both Accurate and Fast. States made before this change cannot be loaded; start the game normally and create new states after updating.
 
 Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
 

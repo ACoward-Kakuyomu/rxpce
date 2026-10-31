@@ -65,6 +65,8 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 VDC DMAの進行とCPUのVRAMアクセス待ちを改善しました。詳細設定の`VDC emulation`で、精度優先の`Accurate`（既定）と速度優先の`Fast`を選べます。また、音声とフレーム制御の時刻を揃え、音声の途切れによるノイズを修正しました。
 
+CPUの命令取得・書込み時刻、スプライト・映像・音源の精度も改善しています。描画処理の待ちで音声生成が止まる問題にも対処しました。CPUアクセスの改善に伴いステートの形式GUIDを更新しているため、以前の形式のステートは読み込めません。
+
 1.0.0のステートは1.1.0では読み込めません。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`は引き続き利用できます。
 
 ### セーブデータと更新
@@ -138,6 +140,8 @@ Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F
 ### Changes in 1.1.0
 
 VDC DMA progression and CPU waits for VRAM accesses have been improved. The advanced `VDC emulation` setting offers `Accurate` (default) and `Fast` modes. Audio and frame pacing now use the same emulated clock, fixing noise caused by audio gaps.
+
+CPU instruction fetching and write timing, sprite evaluation, video timing and audio accuracy have also been improved. Graphics presentation waits no longer block audio generation. Save-state format GUIDs have changed with the CPU-access improvements, so states in earlier formats cannot be loaded.
 
 States from 1.0.0 cannot be loaded in 1.1.0. `Accurate` `.st0` and `Fast` `.fst0` states are also separate. Game-save files (`backup.dat` and `.ram`) remain usable.
 
