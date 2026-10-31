@@ -1,4 +1,4 @@
-# rxpce 1.1.0
+# rxpce 1.2.0
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -14,7 +14,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.1.0の主な対応範囲は次のとおりです。
+1.2.0の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -61,13 +61,11 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.1.0の変更
+### 1.2.0の変更
 
-VDC DMAの進行とCPUのVRAMアクセス待ちを改善しました。詳細設定の`VDC emulation`で、精度優先の`Accurate`（既定）と速度優先の`Fast`を選べます。また、音声とフレーム制御の時刻を揃え、音声の途切れによるノイズを修正しました。
+CPUの命令取得・書込み時刻、スプライト評価・割り込み、映像の走査周期・表示設定、PSG/CD音声のレート変換を改善しました。描画処理の待ちで音声生成が止まる問題にも対処しています。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-CPUの命令取得・書込み時刻、スプライト・映像・音源の精度も改善しています。描画処理の待ちで音声生成が止まる問題にも対処しました。CPUアクセスの改善に伴いステートの形式GUIDを更新しているため、以前の形式のステートは読み込めません。
-
-1.0.0のステートは1.1.0では読み込めません。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`は引き続き利用できます。
+**正式版1.1.0以前のステートは1.2.0では読み込めません。** 更新後はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
 ### セーブデータと更新
 
@@ -96,7 +94,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.1.0 |
+| Feature | Support in 1.2.0 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -137,13 +135,11 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.1.0
+### Changes in 1.2.0
 
-VDC DMA progression and CPU waits for VRAM accesses have been improved. The advanced `VDC emulation` setting offers `Accurate` (default) and `Fast` modes. Audio and frame pacing now use the same emulated clock, fixing noise caused by audio gaps.
+Improved CPU instruction fetching and write timing, sprite evaluation and interrupts, video scan and display timing, and PSG/CD audio resampling. Graphics presentation waits no longer block audio generation. See the [release notes](RELEASE_NOTES.md#english) for details.
 
-CPU instruction fetching and write timing, sprite evaluation, video timing and audio accuracy have also been improved. Graphics presentation waits no longer block audio generation. Save-state format GUIDs have changed with the CPU-access improvements, so states in earlier formats cannot be loaded.
-
-States from 1.0.0 cannot be loaded in 1.1.0. `Accurate` `.st0` and `Fast` `.fst0` states are also separate. Game-save files (`backup.dat` and `.ram`) remain usable.
+**Save states from official releases 1.1.0 and earlier cannot be loaded in 1.2.0.** Start games normally and create new states after updating. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
 ### Save data and updates
 

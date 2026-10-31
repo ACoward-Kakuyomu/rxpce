@@ -46,5 +46,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $archive = "build/packages/rxpce-$env:RELEASE_TAG-windows-x64.zip"
-          gh release create $env:RELEASE_TAG $archive "$archive.sha256" --repo $env:GITHUB_REPOSITORY --verify-tag --title "rxpce $env:RELEASE_TAG" --generate-notes
+          gh release create $env:RELEASE_TAG $archive "$archive.sha256" --repo $env:GITHUB_REPOSITORY --verify-tag --title "rxpce $env:RELEASE_TAG" --notes-file RELEASE_NOTES.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

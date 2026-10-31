@@ -200,6 +200,8 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
+**正式版1.1.0以前のステートは1.2.0では読み込めません。** 更新後はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
 CPUの命令取得・アクセス時刻の改善でも、Accurate/FastそれぞれのHuCard/CD形式GUIDを更新しています。この変更前のステートは読み込めないため、更新後はゲームを新規起動してステートを作成してください。
@@ -425,6 +427,8 @@ Accurate and Fast keep separate states and cannot load each other's states. Rena
 CD restoration requires the same BIOS, disc and configuration. Changing player count, 2/6-button modes or Base clock can cause a state to be rejected. Do not rename a state to reuse it with another game or image format. Old xpce states and development states with different formats are not migrated.
 
 ### 8. Updating and resetting settings
+
+**Save states from official releases 1.1.0 and earlier cannot be loaded in 1.2.0.** Start games normally and create new states after updating. See the [release notes](RELEASE_NOTES.md#english) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 

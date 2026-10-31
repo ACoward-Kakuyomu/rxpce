@@ -26,7 +26,7 @@ if (-not $BuildDirectory) { $BuildDirectory = Join-Path $sourceRoot 'build/Relea
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $sourceRoot 'build/packages' }
 $buildRoot = (Resolve-Path -LiteralPath $BuildDirectory).Path
 $documents = @(
-    'LICENSE.md', 'README.md', 'MANUAL.md', 'BUILDING.md', 'CUE_MATERIALIZE.md', 'CD_DUMP.md',
+    'LICENSE.md', 'README.md', 'MANUAL.md', 'BUILDING.md', 'RELEASE_NOTES.md', 'CUE_MATERIALIZE.md', 'CD_DUMP.md',
     'THIRD_PARTY_NOTICES.md', 'LICENSES/fpce-xpce.txt',
     'LICENSES/PolyForm-Noncommercial-1.0.0.txt', 'third-party/MCS6502/LICENSE.TXT',
     'third-party/libchdr/LICENSES.rxpce.txt', 'third-party/libchdr/README.rxpce.md',

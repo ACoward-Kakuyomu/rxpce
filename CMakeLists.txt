@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(rxpce VERSION 1.1.0 LANGUAGES C CXX RC)
+project(rxpce VERSION 1.2.0 LANGUAGES C CXX RC)
 
 if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8
    OR NOT CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "x64")
@@ -63,7 +63,7 @@ target_link_libraries(rxpce PRIVATE host_paths machine_core machine_state cartri
 target_link_options(rxpce PRIVATE "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/rxpce.manifest")
 function(rxpce_copy_notices target)
 foreach(document IN ITEMS
-    LICENSE.md README.md MANUAL.md BUILDING.md CUE_MATERIALIZE.md CD_DUMP.md THIRD_PARTY_NOTICES.md
+    LICENSE.md README.md MANUAL.md BUILDING.md RELEASE_NOTES.md CUE_MATERIALIZE.md CD_DUMP.md THIRD_PARTY_NOTICES.md
     LICENSES/fpce-xpce.txt LICENSES/PolyForm-Noncommercial-1.0.0.txt
     third-party/MCS6502/LICENSE.TXT
     third-party/libchdr/LICENSES.rxpce.txt third-party/libchdr/README.rxpce.md
