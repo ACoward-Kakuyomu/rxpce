@@ -15,9 +15,9 @@ void HuC6280::initialize_base() {
 std::uint32_t HuC6280::physical(std::uint16_t a) const {
     return (std::uint32_t(state_.mpr[a >> 13]) << 13) | (a & 8191);
 }
-std::uint8_t HuC6280::read(std::uint16_t a) {
+std::uint8_t HuC6280::read(std::uint16_t a, unsigned base_cycle) {
     const auto p = physical(a);
-    bus_wait(p, false);
+    bus_wait(p, false, base_cycle);
     return bus_.read(p, bus_.context);
 }
 void HuC6280::write_physical(std::uint32_t p, std::uint8_t value, unsigned base_cycle) {
@@ -77,13 +77,19 @@ std::uint8_t HuC6280::read_base(std::uint16_t a, void* p) {
         return std::uint8_t(std::exchange(self.cached_opcode_, -1));
     if (self.injected_operand_ >= 0 && a == std::uint16_t(self.state_.pc + 1))
         return std::uint8_t(std::exchange(self.injected_operand_, -1));
-    return self.read(a);
+    // Armed only for the 14 ordinary delegated memory reads. Count real reads
+    // after substitutions: operand(s), then data, even when addresses overlap.
+    unsigned cycle = 0;
+    if (self.delegated_reads_remaining_ && --self.delegated_reads_remaining_ == 0)
+        cycle = std::exchange(self.delegated_read_cycle_, 0);
+    return self.read(a, cycle);
 }
 void HuC6280::write_base(std::uint16_t a, std::uint8_t v, void* p) {
     auto& self = *static_cast<HuC6280*>(p);
     self.write(a, v, self.delegated_write_cycle_);
 }
-bool HuC6280::delegate(std::uint8_t opcode, int operand, unsigned write_cycle) {
+bool HuC6280::delegate(std::uint8_t opcode, int operand, unsigned write_cycle,
+                       unsigned read_cycle) {
     auto& s = state_;
     base_.a = s.a;
     base_.x = s.x;
@@ -94,9 +100,12 @@ bool HuC6280::delegate(std::uint8_t opcode, int operand, unsigned write_cycle) {
     cached_opcode_ = opcode;
     injected_operand_ = operand;
     delegated_write_cycle_ = write_cycle;
+    delegated_read_cycle_ = read_cycle;
+    delegated_reads_remaining_ = read_cycle == 4 ? 2 : read_cycle == 5 ? 3 : 0;
     const auto result = MCS6502ExecNext(&base_);
     cached_opcode_ = injected_operand_ = -1;
     delegated_write_cycle_ = 0;
+    delegated_read_cycle_ = delegated_reads_remaining_ = 0;
     s.a = base_.a;
     s.x = base_.x;
     s.y = base_.y;
@@ -237,7 +246,9 @@ unsigned HuC6280::alu(std::uint8_t op) {
     if (group == 4) {
         write(address, s.a, cycles);
     } else {
-        const auto operand = read(address);
+        // Keep immediate and active T read/write paths at their
+        // existing prefix positions. Decimal adjustment follows the source read.
+        const auto operand = read(address, !transfer && cycles != 2 ? cycles : 0);
         const auto saved_a = s.a;
         if (transfer) {
             s.a = read(0x2000 + s.x);
@@ -565,7 +576,7 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
             address = 0x2000 + std::uint8_t(read(address) + s.x);
         if (op == 0x3c)
             address = std::uint16_t(word(address) + s.x);
-        const auto value = read(address);
+        const auto value = read(address, op == 0x89 ? 0 : op == 0x34 ? 4 : 5);
         s.p = std::uint8_t((s.p & ~(N | V | Z)) | (value & (N | V)) | ((s.a & value) ? 0 : Z));
         s.pc = std::uint16_t(pc + (op == 0x3c ? 3 : 2));
         return op == 0x89 ? 2 : op == 0x34 ? 4 : 5;
@@ -593,11 +604,32 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
         return transfer(op);
     }
     // Only ordinary STX/STY delegate a write at the instruction's trailing edge.
-    // RMW, stack and all reads retain their separately documented models.
+    // RMW, stack and nonselected reads retain their separately documented models.
     const unsigned write_cycle = op == 0x8c || op == 0x8e                               ? 5
                                  : op == 0x84 || op == 0x94 || op == 0x86 || op == 0x96 ? 4
                                                                                         : 0;
-    if (!delegate(op, -1, write_cycle)) {
+    unsigned read_cycle = 0;
+    switch (op) {
+    case 0x24:
+    case 0xa4:
+    case 0xb4:
+    case 0xa6:
+    case 0xb6:
+    case 0xc4:
+    case 0xe4:
+        read_cycle = 4;
+        break;
+    case 0x2c:
+    case 0xac:
+    case 0xbc:
+    case 0xae:
+    case 0xbe:
+    case 0xcc:
+    case 0xec:
+        read_cycle = 5;
+        break;
+    }
+    if (!delegate(op, -1, write_cycle, read_cycle)) {
         s.p = old_p;
         valid = false;
         return 0;
@@ -611,30 +643,18 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
         return 7;
     if (op == 0x4c)
         return 4;
+    if (read_cycle)
+        return read_cycle;
     switch (op) {
     case 0xc0:
         return 2; // CPY immediate: upstream 6502 table has an extra cycle.
-    case 0x24:
     case 0x84:
     case 0x94:
     case 0x86:
     case 0x96:
-    case 0xa4:
-    case 0xb4:
-    case 0xa6:
-    case 0xb6:
-    case 0xc4:
-    case 0xe4:
         return 4;
-    case 0x2c:
     case 0x8c:
     case 0x8e:
-    case 0xac:
-    case 0xbc:
-    case 0xae:
-    case 0xbe:
-    case 0xcc:
-    case 0xec:
         return 5;
     default:
         return base_.timingForLastOperation;

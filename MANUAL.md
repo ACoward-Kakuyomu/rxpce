@@ -1,8 +1,8 @@
 # rxpce 1.3.0 操作説明書 / User Manual
 
-公開済み1.3.0の後の開発版です。版番号は1.3.0のまま、枠のちらつき・表示停止中の不正パターン・スクロール反映時期を修正しています。ゲーム内セーブと設定は引き続き利用できます。
+公開済み1.3.0の後の開発版です。版番号は1.3.0のまま、枠のちらつき・表示停止中の不正パターン・スクロール反映時期を修正し、通常CPUのデータ読出し時刻も改善しています。ゲーム内セーブと設定は引き続き利用できます。
 
-This is a development build after the published 1.3.0 release. The version number remains 1.3.0, with fixes for frame flicker, patterns shown during display blanking and scroll timing. In-game saves and settings remain usable.
+This is a development build after the published 1.3.0 release. The version number remains 1.3.0, with fixes for frame flicker, patterns shown during display blanking and scroll timing, plus improved timing of ordinary CPU data reads. In-game saves and settings remain usable.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 
@@ -207,7 +207,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-**この開発版では正式版1.3.0以前のステートは読み込めません。** 更新後はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+**この開発版では正式版1.3.0以前、およびこの更新前の開発版のステートは読み込めません。** 更新後はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
@@ -438,7 +438,7 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-**This development build cannot load save states from official releases 1.3.0 and earlier.** Start games normally and create new states after updating. See the [release notes](RELEASE_NOTES.md#english-unreleased) for changes.
+**This development build cannot load save states from official releases 1.3.0 and earlier or from earlier development builds.** Start games normally and create new states after updating. See the [release notes](RELEASE_NOTES.md#english-unreleased) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 

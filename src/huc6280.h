@@ -34,7 +34,7 @@ struct Bus {
     // Optional elapsed-prefix synchronization and additional readiness waits.
     void (*synchronize)(std::uint64_t time, void* context) = nullptr;
     unsigned (*ready)(std::uint32_t physical, bool write, void* context) = nullptr;
-    // Scheduler-only fallback for timed writes when the normal bus sync is absent.
+    // Scheduler-only fallback for timed accesses when the normal bus sync is absent.
     // Separate context preserves direct Fast-mode read/write callbacks.
     void (*synchronize_prefix)(std::uint64_t time, void* context) = nullptr;
     void* prefix_context = nullptr;
@@ -72,6 +72,7 @@ class HuC6280 {
     unsigned waits_ = 0;
     int cached_opcode_ = -1, injected_operand_ = -1;
     unsigned delegated_write_cycle_ = 0;
+    unsigned delegated_read_cycle_ = 0, delegated_reads_remaining_ = 0;
     std::uint64_t instruction_time_ = 0;
     unsigned instruction_divisor_ = 1;
     bool in_step_ = false;
@@ -79,7 +80,7 @@ class HuC6280 {
     static std::uint8_t read_base(std::uint16_t, void*);
     static void write_base(std::uint16_t, std::uint8_t, void*);
     std::uint32_t physical(std::uint16_t) const;
-    std::uint8_t read(std::uint16_t);
+    std::uint8_t read(std::uint16_t, unsigned base_cycle = 0);
     void write(std::uint16_t, std::uint8_t, unsigned base_cycle = 0);
     void write_physical(std::uint32_t, std::uint8_t, unsigned base_cycle = 0);
     std::uint16_t word(std::uint16_t);
@@ -93,7 +94,8 @@ class HuC6280 {
     unsigned rmw(std::uint8_t opcode);
     unsigned transfer(std::uint8_t opcode);
     unsigned continue_transfer();
-    bool delegate(std::uint8_t opcode, int operand = -1, unsigned write_cycle = 0);
+    bool delegate(std::uint8_t opcode, int operand = -1, unsigned write_cycle = 0,
+                  unsigned read_cycle = 0);
     void initialize_base();
 };
 } // namespace rxpce_cpu

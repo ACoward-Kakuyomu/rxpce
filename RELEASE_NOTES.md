@@ -7,14 +7,16 @@
 * ラスタ割り込みの通知時期を修正し、画面分割部の枠に1pxの隙間が出る問題を改善しました。
 * 表示停止（burst）中の描画・スプライト評価/IRQ・fetch予約を抑制し、ロード中の古いスプライトや不正パターンの表示を修正しました。burstの独立色$100と行内変更も反映します。
 * 横スクロール値を表示前に保持する近似を採用し、上枠が一瞬横にずれる問題を修正しました。厳密な実機位相は未確定です。
-* **この開発版では正式版1.3.0以前のステートは読み込めません。** 新規開始して新しいステートを作成してください。ゲーム内セーブと設定は引き続き利用できます。
+* 通常CPUのデータ読出し時刻を改善し、機器状態の更新と読出し副作用の前後関係を調整しました。命令取得・間接ポインター等の厳密な時刻には近似が残ります。
+* **この開発版では正式版1.3.0以前、およびこの更新前の開発版のステートは読み込めません。** 新規開始して新しいステートを作成してください。ゲーム内セーブと設定は引き続き利用できます。
 
 ### English (Unreleased)
 
 * Corrected raster interrupt timing to fix one-pixel gaps at split-screen frame seams.
 * Suppressed drawing, sprite evaluation/IRQs and fetch reservations during VDC burst blanking, fixing stale sprites and invalid patterns during loading. The independent burst color $100 and its intra-line changes are now handled.
 * Held horizontal scroll before display using a prefetch approximation, fixing intermittent horizontal shifts in the top frame. Exact hardware phase remains unverified.
-* **This development build cannot load save states from official releases 1.3.0 and earlier.** Start normally and create new states. In-game saves and settings remain usable.
+* Improved the timing of ordinary CPU data reads and their ordering relative to device updates and read side effects. Exact timing of instruction fetches and indirect pointers remains approximate.
+* **This development build cannot load save states from official releases 1.3.0 and earlier or from earlier development builds.** Start normally and create new states. In-game saves and settings remain usable.
 
 The version number is unchanged. The following sections describe the published 1.3.0 release.
 以下は公開済み1.3.0の記録です。今回、版番号は変更していません。
