@@ -20,6 +20,7 @@ struct State {
     std::uint8_t a = 0, x = 0, y = 0, sp = 0xff, p = I | B;
     std::array<std::uint8_t, 8> mpr{};
     std::uint8_t mpr_latch = 0, irq_lines = 0, irq_mask = 0, irq_delay = 0;
+    std::uint8_t irq_read_sample = 0; // Accepted requests cleared by a terminal data read.
     bool irq_sampled_before_sei = false;
     bool nmi_line = false, nmi_pending = false, low_speed = true;
     std::uint64_t elapsed = 0;
@@ -38,6 +39,9 @@ struct Bus {
     // Separate context preserves direct Fast-mode read/write callbacks.
     void (*synchronize_prefix)(std::uint64_t time, void* context) = nullptr;
     void* prefix_context = nullptr;
+    // Optional read-clear IRQ sampler. Zero mask matches any physical address.
+    std::uint8_t (*read_irq_lines)(std::uint32_t physical, void* context) = nullptr;
+    std::uint32_t irq_read_mask = 0, irq_read_match = 0;
 };
 struct StepResult {
     unsigned cycles;  // CPU clocks, including bus waits
@@ -80,7 +84,7 @@ class HuC6280 {
     static std::uint8_t read_base(std::uint16_t, void*);
     static void write_base(std::uint16_t, std::uint8_t, void*);
     std::uint32_t physical(std::uint16_t) const;
-    std::uint8_t read(std::uint16_t, unsigned base_cycle = 0);
+    std::uint8_t read(std::uint16_t, unsigned base_cycle = 0, bool sample_irq = false);
     void write(std::uint16_t, std::uint8_t, unsigned base_cycle = 0);
     void write_physical(std::uint32_t, std::uint8_t, unsigned base_cycle = 0);
     std::uint16_t word(std::uint16_t);

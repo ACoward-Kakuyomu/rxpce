@@ -1,8 +1,8 @@
-# rxpce 1.3.0
+# rxpce 1.4.0
 
-公開済み1.3.0の後の開発版です。版番号は1.3.0のまま、枠のちらつき・表示停止中の不正パターン・スクロール反映時期を修正し、通常CPUのデータ読出し時刻も改善しています。ゲーム内セーブと設定は引き続き利用できます。
+rxpce 1.4.0では、画面分割部のちらつき・表示崩れと通常CPUのデータ読出し時刻を改善し、表示の保持、6ボタン入力、I/O読出し、CD取り込み、診断ログを修正しました。ゲーム内セーブと設定は引き続き利用できます。
 
-This is a development build after the published 1.3.0 release. The version number remains 1.3.0, with fixes for frame flicker, patterns shown during display blanking and scroll timing, plus improved timing of ordinary CPU data reads. In-game saves and settings remain usable.
+rxpce 1.4.0 improves split-screen rendering and the timing of ordinary CPU data reads, with fixes for frame retention, six-button input, I/O reads, CD capture and diagnostic logging. In-game saves and settings remain usable.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -18,7 +18,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.3.0の主な対応範囲は次のとおりです。
+1.4.0の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -65,11 +65,11 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.3.0の変更
+### 1.4.0の変更
 
-特殊な背景・スプライトモードとVRAM書込みを改善し、表示が乱れる問題を修正しました。スプライトの描画制限を選択する設定を追加しています。Accurateでは走査線途中のパレット変更を反映し、ステート復帰後の不完全な映像の提示も抑えます。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
+rxpce 1.4.0では、画面分割部のちらつき・表示崩れと通常CPUのデータ読出し時刻を改善し、表示の保持、6ボタン入力、I/O読出し、CD取り込み、診断ログを修正しました。ゲーム内セーブと設定は引き続き利用できます。 詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-**この開発版では正式版1.3.0以前、およびこの更新前の開発版のステートは読み込めません。** 更新後はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
+**正式版1.3.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
 ### セーブデータと更新
 
@@ -98,7 +98,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.3.0 |
+| Feature | Support in 1.4.0 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -139,11 +139,11 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.3.0
+### Changes in 1.4.0
 
-Improved special background and sprite modes and VRAM writes to fix display corruption. Added an optional hardware sprite drawing limit. Accurate now applies palette changes within a scanline, and state loading avoids presenting incomplete restored images. See the [release notes](RELEASE_NOTES.md#english-unreleased) for details.
+rxpce 1.4.0 improves split-screen rendering and the timing of ordinary CPU data reads, with fixes for frame retention, six-button input, I/O reads, CD capture and diagnostic logging. In-game saves and settings remain usable. See the [release notes](RELEASE_NOTES.md#english) for details.
 
-**This development build cannot load save states from official releases 1.3.0 and earlier or from earlier development builds.** Start games normally and create new states after updating. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
+**Save states from official releases 1.3.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
 ### Save data and updates
 

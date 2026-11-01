@@ -1,5 +1,6 @@
 #pragma once
 #include <condition_variable>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -17,10 +18,17 @@ namespace rxpce_log {
 class AsyncWriter {
   public:
     using Sink = std::function<void(std::string_view)>;
+    using Clock = std::uint64_t (*)() noexcept;
+    static std::uint64_t steady_milliseconds() noexcept {
+        return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              std::chrono::steady_clock::now().time_since_epoch())
+                                              .count());
+    }
     static constexpr std::size_t byte_limit = 1024 * 1024;
-    explicit AsyncWriter(Sink sink, std::size_t bytes = byte_limit, std::size_t messages = 2048)
-        : sink_(std::move(sink)), byte_limit_(bytes), message_limit_(messages) {
-        if (!sink_ || !bytes || !messages)
+    explicit AsyncWriter(Sink sink, std::size_t bytes = byte_limit, std::size_t messages = 2048,
+                         Clock clock = steady_milliseconds)
+        : sink_(std::move(sink)), byte_limit_(bytes), message_limit_(messages), clock_(clock) {
+        if (!sink_ || !bytes || !messages || !clock_)
             throw std::invalid_argument("Invalid log writer limits or sink");
         worker_ = std::thread([this] { run(); });
     }
@@ -40,6 +48,10 @@ class AsyncWriter {
         std::lock_guard<std::mutex> lock(mutex_);
         if (stopping_)
             return false;
+        if (faulted_ && clock_() - failed_at_ < 1000) {
+            ++dropped_;
+            return false;
+        }
         if (text.size() > byte_limit_ - bytes_ ||
             pending_.size() + (writing_ ? 1 : 0) >= message_limit_) {
             ++dropped_;
@@ -56,13 +68,17 @@ class AsyncWriter {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!stopping_) {
             ++dropped_;
+            if (faulted_ && clock_() - failed_at_ >= 1000)
+                probe_ = true;
             ready_.notify_one();
         }
     }
     // For tests/shutdown boundaries; never call from the emulation or playback loop.
     void flush() {
         std::unique_lock<std::mutex> lock(mutex_);
-        drained_.wait(lock, [this] { return pending_.empty() && !writing_ && !dropped_; });
+        drained_.wait(lock, [this] {
+            return pending_.empty() && !writing_ && !probe_ && (!dropped_ || faulted_);
+        });
     }
 
   private:
@@ -81,7 +97,12 @@ class AsyncWriter {
             std::uint64_t dropped = 0;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
-                ready_.wait(lock, [this] { return stopping_ || !pending_.empty() || dropped_; });
+                ready_.wait(lock, [this] {
+                    return stopping_ || !pending_.empty() || probe_ || (!faulted_ && dropped_);
+                });
+                if (stopping_ && faulted_)
+                    return;
+                probe_ = false;
                 if (pending_.empty() && !dropped_ && stopping_)
                     return;
                 dropped = std::exchange(dropped_, 0);
@@ -92,20 +113,32 @@ class AsyncWriter {
                 }
                 writing_ = true;
             }
+            bool summary_ok = true;
             if (dropped) {
                 char warning[96];
                 const int count =
                     std::snprintf(warning, sizeof(warning), "Log messages dropped: count=%llu\n",
                                   static_cast<unsigned long long>(dropped));
                 if (count > 0 && static_cast<std::size_t>(count) < sizeof(warning))
-                    deliver(std::string_view(warning, static_cast<std::size_t>(count)));
+                    summary_ok =
+                        deliver(std::string_view(warning, static_cast<std::size_t>(count)));
             }
-            const bool failed = has_message && !deliver(text);
+            const bool failed = !summary_ok || (has_message && !deliver(text));
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 bytes_ -= text.size();
-                if (failed)
-                    ++dropped_;
+                if (failed) {
+                    if (!summary_ok)
+                        dropped_ += dropped;
+                    dropped_ += (has_message ? 1 : 0) + pending_.size();
+                    pending_.clear();
+                    bytes_ = 0;
+                    faulted_ = true;
+                    failed_at_ = clock_();
+                    probe_ = false;
+                } else {
+                    faulted_ = false;
+                }
                 writing_ = false;
             }
             drained_.notify_all();
@@ -113,6 +146,9 @@ class AsyncWriter {
     }
     Sink sink_;
     const std::size_t byte_limit_, message_limit_;
+    Clock clock_;
+    std::uint64_t failed_at_ = 0;
+    bool faulted_ = false, probe_ = false;
     std::mutex mutex_;
     std::condition_variable ready_, drained_;
     std::deque<std::string> pending_;

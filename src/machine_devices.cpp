@@ -27,6 +27,8 @@ void TraceHost(const DeviceHost& host, const char* format, ...) {
 } // namespace
 void AttachMachineVideo(Machine& m, const DeviceHost& host, FrameSurface frame) {
     m.video.line.active = false;
+    m.video.display_rows.fill(false);
+    m.video.initialized_rows.fill(false);
     m.video_ports = host;
     m.video_surface = frame;
     m.video.output_bound = true;
@@ -36,6 +38,8 @@ void AttachMachineVideo(Machine& m, const DeviceHost& host, FrameSurface frame) 
 void ResetVideoAfterLoad(Machine& m, FrameSurface frame) {
     m.video.resume = VideoResume::waiting;
     m.video.line.active = false;
+    m.video.display_rows.fill(false);
+    m.video.initialized_rows.fill(false);
     m.video.render_frame = m.video.next_render = false;
     m.video.row_bias =
         (std::max)(0, ((std::min)(m.io.screen_h, m.frame_lines) - int(frame_height)) / 2);
@@ -56,11 +60,29 @@ void FinishMachinePaletteLine(Machine& m, FrameSurface frame) {
     auto& line = m.video.line;
     if (!line.active)
         return;
-    if (frame.pixels)
+    if (frame.pixels) {
         ResolvePaletteLine(line, frame, m.video.palette, frame_width);
+        m.video.display_rows[line.output_row] = true;
+        m.video.initialized_rows[line.output_row] = true;
+    }
     line.active = false;
 }
 namespace {
+void fill_missing_rows(Machine& m, FrameSurface frame, bool complete_display) {
+    if (!frame.pixels || frame.count < frame_width * frame_height)
+        return;
+    const auto area = VisibleRectangle(m);
+    const auto blank = static_cast<rxpce_video::Pixel>(
+        m.video.palette[256] |
+        ((m.vce_clock.state().control & 128) ? rxpce_video::monochrome_bit : 0));
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        if (complete_display ? m.video.display_rows[row] : m.video.initialized_rows[row])
+            continue;
+        std::fill_n(frame.pixels + row * frame_width, frame_width, blank);
+        std::fill_n(m.video.priority.data() + row * frame_width, frame_width, 0);
+        m.video.initialized_rows[row] = true;
+    }
+}
 void before_palette_write(Machine& m, unsigned entry, rxpce_video::Pixel color) {
     auto& line = m.video.line;
     if (m.vdc_mode != rxpce_video::VdcMode::accurate || !line.active ||
@@ -85,6 +107,11 @@ void before_palette_write(Machine& m, unsigned entry, rxpce_video::Pixel color) 
         ResolvePaletteLine(line, m.video_surface, m.video.palette, end);
 }
 } // namespace
+void FinishMachineDisplay(Machine& m, FrameSurface frame) {
+    FinishMachinePaletteLine(m, frame);
+    if (m.video.render_frame)
+        fill_missing_rows(m, frame, true);
+}
 void RenderMachineScanline(Machine& m, FrameSurface frame, int row) {
     FinishMachinePaletteLine(m, frame);
     m.video.line.active = false;
@@ -108,8 +135,10 @@ void PresentMachineFrame(Machine& m, const DeviceHost& host, FrameSurface frame,
         host.sync_audio(host.context,
                         static_cast<std::uint32_t>(m.video_clock.cpu_deadline(master)));
     if (m.video.resume == VideoResume::ready && m.video.render_frame && host.present &&
-        frame.pixels)
+        frame.pixels) {
+        fill_missing_rows(m, frame, false);
         host.present(host.context, frame, VisibleRectangle(m));
+    }
     m.video.next_render = host.frame_start ? host.frame_start(host.context, master)
                                            : (!host.begin_frame || host.begin_frame(host.context));
 }
@@ -146,8 +175,13 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             machine.io.vdc[reg].set_high(V);
         WriteMachineVdcRegister(machine, reg);
         if (port == 3) {
-            if (reg == MARR && machine.vdc_mode == rxpce_video::VdcMode::accurate)
-                QueueVramRead(machine, machine.io.vdc[MARR].value);
+            if (reg == MARR) {
+                if (machine.vdc_mode == rxpce_video::VdcMode::fast)
+                    machine.vdc.cpu.read_buffer =
+                        ReadVramDirect(machine, machine.io.vdc[MARR].value);
+                else
+                    QueueVramRead(machine, machine.io.vdc[MARR].value);
+            }
             if (reg == CR) {
                 constexpr byte increments[] = {1, 32, 64, 128};
                 machine.io.vdc_inc = increments[(V >> 3) & 3];
@@ -281,7 +315,7 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
         return;
 
     case 0x1400: /* IRQ */
-        switch (A & 15) {
+        switch (A & 3) {
         case 2:
             machine.io.irq_mask = V & 7;
             return;
@@ -325,25 +359,18 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
         case 1:
             return 0;
         case 2:
-            if (machine.io.vdc_reg == VRR)
-                return static_cast<byte>(machine.vdc_mode == rxpce_video::VdcMode::fast
-                                             ? ReadVramDirect(machine, machine.io.vdc[MARR].value)
-                                             : machine.vdc.cpu.read_buffer);
-            else
-                return machine.io.vdc[machine.io.vdc_reg].low();
+            return static_cast<byte>(machine.vdc.cpu.read_buffer);
         case 3:
+            ret = static_cast<byte>(machine.vdc.cpu.read_buffer >> 8);
             if (machine.io.vdc_reg == VRR) {
-                ret = static_cast<byte>((machine.vdc_mode == rxpce_video::VdcMode::fast
-                                             ? ReadVramDirect(machine, machine.io.vdc[MARR].value)
-                                             : machine.vdc.cpu.read_buffer) >>
-                                        8);
                 machine.io.vdc[MARR].value += machine.io.vdc_inc;
-                if (machine.vdc_mode == rxpce_video::VdcMode::accurate)
+                if (machine.vdc_mode == rxpce_video::VdcMode::fast)
+                    machine.vdc.cpu.read_buffer =
+                        ReadVramDirect(machine, machine.io.vdc[MARR].value);
+                else
                     QueueVramRead(machine, machine.io.vdc[MARR].value);
-
-                return ret;
-            } else
-                return machine.io.vdc[machine.io.vdc_reg].high();
+            }
+            return ret;
         }
         break;
 
@@ -354,7 +381,7 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
         case 5: {
             const auto value = machine.io.vce[machine.io.vce_reg.value & 0x1ff].high();
             machine.io.vce_reg.value = word((machine.io.vce_reg.value + 1) & 0x1ff);
-            return value;
+            return static_cast<byte>(value | 0xfe);
         }
         }
         break;
@@ -403,7 +430,7 @@ std::uint8_t ReadMachineIo(Machine& machine, const DeviceHost& host, std::uint16
     }
 
     case 0x1400: /* IRQ */
-        switch (A & 15) {
+        switch (A & 3) {
         case 2:
             return machine.io.irq_mask;
         case 3:
@@ -450,6 +477,12 @@ void TickMachineLine(Machine& machine, const DeviceHost& host, FrameSurface fram
     if (!machine.video.output_bound)
         AttachMachineVideo(machine, host, frame);
     else {
+        if (machine.video_surface.pixels != frame.pixels ||
+            machine.video_surface.count != frame.count) {
+            machine.video.line.active = false;
+            machine.video.display_rows.fill(false);
+            machine.video.initialized_rows.fill(false);
+        }
         machine.video_ports = host;
         machine.video_surface = frame;
     }

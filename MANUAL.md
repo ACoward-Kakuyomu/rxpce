@@ -1,8 +1,8 @@
-# rxpce 1.3.0 操作説明書 / User Manual
+# rxpce 1.4.0 操作説明書 / User Manual
 
-公開済み1.3.0の後の開発版です。版番号は1.3.0のまま、枠のちらつき・表示停止中の不正パターン・スクロール反映時期を修正し、通常CPUのデータ読出し時刻も改善しています。ゲーム内セーブと設定は引き続き利用できます。
+rxpce 1.4.0では、画面分割部のちらつき・表示崩れと通常CPUのデータ読出し時刻を改善し、表示の保持、6ボタン入力、I/O読出し、CD取り込み、診断ログを修正しました。ゲーム内セーブと設定は引き続き利用できます。
 
-This is a development build after the published 1.3.0 release. The version number remains 1.3.0, with fixes for frame flicker, patterns shown during display blanking and scroll timing, plus improved timing of ordinary CPU data reads. In-game saves and settings remain usable.
+rxpce 1.4.0 improves split-screen rendering and the timing of ordinary CPU data reads, with fixes for frame retention, six-button input, I/O reads, CD capture and diagnostic logging. In-game saves and settings remain usable.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 
@@ -159,8 +159,11 @@ Monoは左右の音声の平均です。音声のレート変換による遅延�
 | ROM folder | ファイル選択の開始フォルダー |
 | State / RAM folder | ステートとPopulous RAMの保存先。空欄または`.`はイメージの隣 |
 | System Card BIOS (CD only) | CD用BIOSのパス |
+| Allow network CD images | 既定OFF。次のCD読込みから、画像本体とCUEの参照先をネットワーク上から開くことを許可 |
 
 `.`以外の相対フォルダーは、プロセスの作業フォルダーを基準にします。保存先を一定にしたい場合は、書込み可能な絶対パスを指定してください。`backup.dat`の場所はこの設定では変わりません。
+
+CDの入力画像とCUEの参照先は、既定では通常のローカルドライブだけを開きます。ローカルの親相対/絶対パス、対応するジャンクション/シンボリックリンクは利用できます。遠隔の割当ドライブ、UNC、不明なデバイス/リンク形式は拒否します。信頼したネットワーク媒体を使う場合だけ`Allow network CD images`を有効にしてください。許可はCUE内の全参照先へ適用され、最初のサーバだけに限定されません。現在マウント中の媒体は切り替わりません。Windowsのファイルダイアログ自体、BIOSやROM/ZIP、出力先のネットワークアクセスを制御する設定ではありません。
 
 #### Advanced
 
@@ -172,6 +175,8 @@ Monoは左右の音声の平均です。音声のレート変換による遅延�
 | Enable diagnostic log | 詳細ログを有効化。初期値は無効 |
 | Show FPS | FPS表示。初期値は無効。実行中はF7でも変更可能 |
 | XInput support／DirectInput support | パッド入力方式の有効／無効。初期値はXInputのみ有効 |
+
+詳細ログが無効でも、音声の初回障害・エラーの変化・回復は記録します。同じWASAPIエラーは繰返し件数を要約します。ログを書き込めない間は再試行を抑制し、一部の記録を破棄するため、完全な履歴は保証しません。
 
 VDC emulationは処理負荷とタイミングモデルの選択です。FastでもAutomatic frame skipが有効なら通常速度（約60 Hz）を維持します。ゲームの表示や動作に差がある場合はAccurateを選び、ゲームを開き直してください。
 
@@ -207,7 +212,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-**この開発版では正式版1.3.0以前、およびこの更新前の開発版のステートは読み込めません。** 更新後はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+**正式版1.3.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
@@ -390,8 +395,11 @@ Configure the player count, each player's 2/6-button mode, device and bindings. 
 | ROM folder | Initial folder for the file picker |
 | State / RAM folder | State and Populous RAM folder; empty or `.` means beside the image |
 | System Card BIOS (CD only) | Path to the CD BIOS |
+| Allow network CD images | Off by default. Allows network image files and all CUE references on the next CD load |
 
 Other relative folder paths use the process working directory. Use a writable absolute path for a fixed location. This setting does not relocate `backup.dat`.
+
+CD inputs and CUE references use ordinary local drives by default. Local parent-relative/absolute paths and supported junctions/symbolic links remain usable. UNC paths, remote mapped drives and unclassified devices/reparse tags are rejected. Enable `Allow network CD images` only for trusted network media. Permission covers every CUE reference, not just the initial server. It applies to the next load and does not remount an active disc. It does not control the Windows file picker itself, BIOS/ROM/ZIP paths or output destinations.
 
 #### Advanced
 
@@ -403,6 +411,8 @@ Other relative folder paths use the process working directory. Use a writable ab
 | Enable diagnostic log | Enable detailed logging; disabled by default |
 | Show FPS | FPS display; disabled by default. F7 changes it during play |
 | XInput support / DirectInput support | Enable input backends; only XInput is enabled by default |
+
+Initial audio failures, changes in error code and recovery are logged even when detailed logging is disabled. Repeated WASAPI errors are summarized. Log write failures throttle retries and may drop records; the log is best effort.
 
 VDC emulation selects processing cost and timing behavior. Fast still runs at the normal speed (approximately 60 Hz) when Automatic frame skip is enabled. If a game shows display or behavior differences, select Accurate and reopen the game.
 
@@ -438,7 +448,7 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-**This development build cannot load save states from official releases 1.3.0 and earlier or from earlier development builds.** Start games normally and create new states after updating. See the [release notes](RELEASE_NOTES.md#english-unreleased) for changes.
+**Save states from official releases 1.3.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 

@@ -241,9 +241,10 @@ struct DiscImage::Impl::Cue final : Impl {
 };
 
 std::unique_ptr<DiscImage::Impl> DiscImage::Impl::open_cue(const std::wstring& path,
-                                                           const ImageProgress& progress) {
+                                                           const ImageProgress& progress,
+                                                           MediaAccess access) {
     const auto cue_path = full_path(path);
-    File cue(cue_path);
+    File cue(cue_path, access);
     if (cue.bytes > 1024 * 1024)
         throw std::runtime_error("CUE exceeds 1 MiB");
     std::vector<unsigned char> text(static_cast<std::size_t>(cue.bytes));
@@ -260,8 +261,8 @@ std::unique_ptr<DiscImage::Impl> DiscImage::Impl::open_cue(const std::wstring& p
             if (!absolute && (drive || slash(file.name[0])))
                 throw std::runtime_error(
                     "Drive-relative or root-relative FILE path is unsupported");
-            auto source =
-                std::make_shared<File>(full_path(absolute ? file.name : folder + file.name));
+            auto source = std::make_shared<File>(
+                full_path(absolute ? file.name : folder + file.name), access);
             if (!source->bytes || source->bytes % file.sector_bytes ||
                 source->bytes / file.sector_bytes > 900000)
                 throw std::runtime_error("Invalid BIN sector count or size remainder");

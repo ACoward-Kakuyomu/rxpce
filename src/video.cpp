@@ -5,6 +5,7 @@
 #include "log.h"
 #include <dxgi.h>
 #include <fstream>
+#include <chrono>
 
 HWND hwnd = nullptr;
 std::atomic_bool bActiveApp{false}, bFullScreen{false};
@@ -27,6 +28,7 @@ HMENU saved_menu = nullptr;
 int last_width = 0, last_height = 0; // Emulation thread only.
 bool device_lost = false;            // Presentation worker only while active.
 HRESULT last_error = S_OK;
+std::chrono::steady_clock::time_point next_device_attempt{};
 } // namespace
 
 BOOL InitializeVideo() {
@@ -34,6 +36,7 @@ BOOL InitializeVideo() {
     last_width = last_height = 0;
     device_lost = false;
     last_error = S_OK;
+    next_device_attempt = {};
     palette = rxpce_video::linear_palette();
     if (!video_settings.palette_file.empty()) {
         std::ifstream input(video_settings.palette_file, std::ios::binary);
@@ -54,22 +57,28 @@ BOOL InitializeVideo() {
         presenter = std::make_unique<rxpce_video::FramePresenter>(
             [adapter](const rxpce_video::PresentationFrame& image) {
                 if (device_lost) {
+                    const auto now = std::chrono::steady_clock::now();
+                    if (now < next_device_attempt)
+                        return false;
+                    next_device_attempt = now + std::chrono::milliseconds(100);
                     if (FAILED(renderer.initialize(hwnd, adapter)))
-                        return;
+                        return false;
                     device_lost = false;
                 }
-                const HRESULT status =
-                    renderer.render(image.pixels.data(), image.width, image.height, image.scale,
-                                    true, image.nonblocking, image.aspect_mode);
+                const auto attempt = renderer.present_frame(image);
+                const auto status = attempt.status;
                 if (FAILED(status) && status != last_error)
                     LogDumpDetail("D3D11 render failed: %08lX\n",
                                   static_cast<unsigned long>(status));
                 last_error = status;
                 if (status == DXGI_ERROR_DEVICE_REMOVED || status == DXGI_ERROR_DEVICE_RESET) {
-                    LogDumpDetail("D3D11 device lost, retrying next frame: %08lX\n",
+                    LogDumpDetail("D3D11 device lost, retrying presentation: %08lX\n",
                                   static_cast<unsigned long>(status));
                     device_lost = true;
+                    next_device_attempt =
+                        std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
                 }
+                return attempt.complete;
             });
     } catch (const std::exception& error) {
         LogDumpDetail("D3D11 presentation worker failed: %s\n", error.what());

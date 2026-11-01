@@ -1,4 +1,5 @@
 #pragma once
+#include "media_access.h"
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -50,8 +51,10 @@ class DiscImage {
     DiscImage& operator=(DiscImage&&) noexcept;
     DiscImage(const DiscImage&) = delete;
     DiscImage& operator=(const DiscImage&) = delete;
-    bool open_cue(const std::wstring& path, std::string& error, const ImageProgress& progress = {});
-    bool open_chd(const std::wstring& path, std::string& error, const ImageProgress& progress = {});
+    bool open_cue(const std::wstring& path, std::string& error, const ImageProgress& progress = {},
+                  MediaAccess access = MediaAccess::local_only);
+    bool open_chd(const std::wstring& path, std::string& error, const ImageProgress& progress = {},
+                  MediaAccess access = MediaAccess::local_only);
     // Conversion helper: original CUE bytes plus generated gaps, in a new folder.
     bool write_materialized_cue(const std::wstring& folder, std::string& error,
                                 const ImageProgress& progress = {});

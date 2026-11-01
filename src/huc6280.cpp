@@ -15,10 +15,18 @@ void HuC6280::initialize_base() {
 std::uint32_t HuC6280::physical(std::uint16_t a) const {
     return (std::uint32_t(state_.mpr[a >> 13]) << 13) | (a & 8191);
 }
-std::uint8_t HuC6280::read(std::uint16_t a, unsigned base_cycle) {
+std::uint8_t HuC6280::read(std::uint16_t a, unsigned base_cycle, bool sample_irq) {
     const auto p = physical(a);
     bus_wait(p, false, base_cycle);
-    return bus_.read(p, bus_.context);
+    // Retain a terminal-cycle request only when this read acknowledges it.
+    // Held requests keep their existing boundary latency.
+    const bool poll = sample_irq && !(state_.p & I) && bus_.read_irq_lines &&
+                      (p & bus_.irq_read_mask) == bus_.irq_read_match;
+    const auto before = poll ? bus_.read_irq_lines(p, bus_.context) & ~state_.irq_mask & 7 : 0;
+    const auto value = bus_.read(p, bus_.context);
+    if (before && (before & ~bus_.read_irq_lines(p, bus_.context)))
+        state_.irq_read_sample = static_cast<std::uint8_t>(before);
+    return value;
 }
 void HuC6280::write_physical(std::uint32_t p, std::uint8_t value, unsigned base_cycle) {
     bus_wait(p, true, base_cycle);
@@ -82,7 +90,7 @@ std::uint8_t HuC6280::read_base(std::uint16_t a, void* p) {
     unsigned cycle = 0;
     if (self.delegated_reads_remaining_ && --self.delegated_reads_remaining_ == 0)
         cycle = std::exchange(self.delegated_read_cycle_, 0);
-    return self.read(a, cycle);
+    return self.read(a, cycle, cycle != 0);
 }
 void HuC6280::write_base(std::uint16_t a, std::uint8_t v, void* p) {
     auto& self = *static_cast<HuC6280*>(p);
@@ -170,12 +178,14 @@ StepResult HuC6280::step() {
     const bool delayed = state_.irq_delay != 0;
     if (delayed)
         --state_.irq_delay;
+    const unsigned sampled = std::exchange(state_.irq_read_sample, 0);
+    const unsigned active =
+        sampled ? sampled : (!delayed && irq_enabled ? state_.irq_lines & ~state_.irq_mask & 7 : 0);
     if (state_.nmi_pending) {
         state_.nmi_pending = false;
         cycles = enter_interrupt(0xfffc, false);
         interrupt = true;
-    } else if (!delayed && irq_enabled && (state_.irq_lines & ~state_.irq_mask & 7)) {
-        const unsigned active = state_.irq_lines & ~state_.irq_mask;
+    } else if (active) {
         cycles = enter_interrupt((active & Timer)  ? 0xfffa
                                  : (active & Irq1) ? 0xfff8
                                                    : 0xfff6,
@@ -248,7 +258,9 @@ unsigned HuC6280::alu(std::uint8_t op) {
     } else {
         // Keep immediate and active T read/write paths at their
         // existing prefix positions. Decimal adjustment follows the source read.
-        const auto operand = read(address, !transfer && cycles != 2 ? cycles : 0);
+        const bool terminal = !transfer && cycles != 2;
+        const bool decimal = (group == 3 || group == 7) && (s.p & D);
+        const auto operand = read(address, terminal ? cycles : 0, terminal && !decimal);
         const auto saved_a = s.a;
         if (transfer) {
             s.a = read(0x2000 + s.x);
@@ -576,7 +588,7 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
             address = 0x2000 + std::uint8_t(read(address) + s.x);
         if (op == 0x3c)
             address = std::uint16_t(word(address) + s.x);
-        const auto value = read(address, op == 0x89 ? 0 : op == 0x34 ? 4 : 5);
+        const auto value = read(address, op == 0x89 ? 0 : op == 0x34 ? 4 : 5, op != 0x89);
         s.p = std::uint8_t((s.p & ~(N | V | Z)) | (value & (N | V)) | ((s.a & value) ? 0 : Z));
         s.pc = std::uint16_t(pc + (op == 0x3c ? 3 : 2));
         return op == 0x89 ? 2 : op == 0x34 ? 4 : 5;

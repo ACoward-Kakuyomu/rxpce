@@ -25,6 +25,9 @@ enum class VideoResume { ready, waiting, drawing };
 struct VideoState {
     VideoResume resume = VideoResume::ready;
     PaletteLine line; // Host-only composition state; never serialized.
+    // Host pixels: completed rows in this VDC display, and initialized rows in
+    // the bound surface. Neither bitmap is part of emulated hardware state.
+    std::array<bool, frame_height> display_rows{}, initialized_rows{};
     std::array<std::int16_t, 256> sprites{};
     std::array<rxpce_video::Pixel, 512> palette{};
     std::array<std::uint8_t, frame_width * frame_height> priority{};

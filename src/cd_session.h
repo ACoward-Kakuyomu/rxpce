@@ -10,7 +10,8 @@ struct Session {
 };
 std::wstring bios_path(const std::wstring& path);
 bool prepare(const std::wstring& image, const std::wstring& bios, std::unique_ptr<Session>& output,
-             std::string& error, const ImageProgress& progress = {});
+             std::string& error, const ImageProgress& progress = {},
+             MediaAccess access = MediaAccess::local_only);
 void queue(std::unique_ptr<Session> session);
 std::unique_ptr<Session> take();
 } // namespace rxpce_cd

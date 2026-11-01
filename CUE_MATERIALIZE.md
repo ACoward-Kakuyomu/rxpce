@@ -29,7 +29,7 @@
 
 ### 入出力と制限
 
-* 引数は「入力 CUE」「新規出力フォルダー」の2つです。空白を含むパスは引用符で囲んでください。
+* 引数は「入力 CUE」「新規出力フォルダー」の2つです。ネットワーク上の入力画像/参照先を許可する場合だけ、先頭に`--allow-network`を追加します。空白を含むパスは引用符で囲んでください。
 * 出力フォルダーは**未作成**で、親フォルダーは既存である必要があります。空の既存フォルダーでも拒否します。元 CUE と BIN は変更しません。
 * 出力は `disc.cue` と `track01.bin` などのトラック別ファイルです。CUE 内の BIN パスは相対パスなので、出力フォルダー全体をまとめて移動できます。
 * 入力は `FILE ... BINARY`、`AUDIO`／`MODE1/2048`／`MODE1/2352` に対応します。少なくとも1本のデータトラックが必要です。単一 BIN・複数 BIN、記録済みギャップ・生成ギャップを扱います。音楽CDのみの構成、WAV／MP3、MODE2、POSTGAP などは対象外です。汎用 CUE 編集・修復ツールではありません。
@@ -38,6 +38,8 @@
 * 終了コードは `0` が成功、`1` が読込み・書込み等の失敗、`2` が引数の誤りです。エラー内容は標準エラー出力へ表示します。
 
 CUE 版と CHD 版の rxpce ステートは共有しません。変換後は CHD 用のステートを新しく保存してください。ビルド方法は [BUILDING.md](BUILDING.md)、利用条件は [LICENSE.md](LICENSE.md) を参照してください。
+
+既定では通常のローカルドライブと対応するローカルリンクだけを読み込みます。UNC・遠隔の割当ドライブ・不明なデバイス/リンク形式は拒否します。ローカルの親相対/絶対参照は利用できます。`--allow-network`は入力CUEと全FILE参照を許可するため、信頼できる媒体にだけ指定してください。出力先の方針は変更しません。
 
 ## English
 
@@ -75,3 +77,5 @@ See the [official MAME chdman documentation](https://docs.mamedev.org/tools/chdm
 * Exit codes: `0` success, `1` processing failure, `2` incorrect arguments. Errors go to standard error.
 
 rxpce save states are not shared between CUE and CHD versions. Save a new state after conversion. See [BUILDING.md](BUILDING.md#english) for building and [LICENSE.md](LICENSE.md) for terms.
+
+Network input is opt-in: `cue_materialize --allow-network <source.cue> <new-output-folder>` permits the input CUE and every FILE reference, not just the initial server. Use this only for trusted media. Without it, ordinary local drives and supported local links are accepted; UNC, remote mapped drives and unclassified devices/reparse tags are rejected. Local parent-relative/absolute references remain supported. The output-folder policy is unchanged.

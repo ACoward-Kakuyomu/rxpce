@@ -41,7 +41,7 @@ struct ChdStorage {
         std::vector<std::uint16_t> words;
     };
     std::array<Cache, 2> cache;
-    explicit ChdStorage(const std::wstring& path) : file(path) {}
+    ChdStorage(const std::wstring& path, MediaAccess access) : file(path, access) {}
     static std::uint64_t size(void* p) {
         return static_cast<ChdStorage*>(p)->file.bytes;
     }
@@ -327,9 +327,10 @@ struct DiscImage::Impl::Chd final : Impl {
     }
 };
 std::unique_ptr<DiscImage::Impl> DiscImage::Impl::open_chd(const std::wstring& path,
-                                                           const ImageProgress& progress) {
+                                                           const ImageProgress& progress,
+                                                           MediaAccess access) {
     auto next = std::make_unique<Chd>();
-    next->chd = std::make_unique<ChdStorage>(full_path(path));
+    next->chd = std::make_unique<ChdStorage>(full_path(path), access);
     auto& chd = *next->chd;
     chd.open(next->toc);
     std::uint64_t done = 0;

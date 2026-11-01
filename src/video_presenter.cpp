@@ -6,7 +6,7 @@
 #include <utility>
 
 namespace rxpce_video {
-FramePresenter::FramePresenter(std::function<void(const PresentationFrame&)> render)
+FramePresenter::FramePresenter(std::function<bool(const PresentationFrame&)> render)
     : render_(std::move(render)) {
     if (!render_)
         throw std::invalid_argument("Missing presentation callback");
@@ -22,6 +22,9 @@ bool FramePresenter::submit(const PresentationFrame& frame) {
     if (stopped_)
         return false;
     pending_ = frame;
+    pending_.generation = ++next_generation_;
+    if (!pending_.generation)
+        pending_.generation = ++next_generation_;
     if (ready_)
         ++statistics_.replaced;
     ready_ = true;
@@ -48,18 +51,26 @@ PresentationStatistics FramePresenter::take_statistics() {
 void FramePresenter::run() noexcept {
     try {
         PresentationFrame current;
+        bool retry = false;
         for (;;) {
             {
                 std::unique_lock<std::mutex> lock(mutex_);
-                changed_.wait(lock, [&] { return stopped_ || ready_; });
+                if (retry) {
+                    // A stream of newer frames must not turn a blocked GPU into a spin loop.
+                    changed_.wait_for(lock, std::chrono::milliseconds(4), [&] { return stopped_; });
+                } else {
+                    changed_.wait(lock, [&] { return stopped_ || ready_; });
+                }
                 if (stopped_)
                     return;
                 // Reuse both buffers. Producer never touches the in-flight image.
-                std::swap(current, pending_);
-                ready_ = false;
+                if (ready_) {
+                    std::swap(current, pending_);
+                    ready_ = false;
+                }
             }
             const auto begin = std::chrono::steady_clock::now();
-            render_(current);
+            retry = !render_(current);
             const auto elapsed =
                 static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
                                                std::chrono::steady_clock::now() - begin)

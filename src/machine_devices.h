@@ -23,6 +23,7 @@ void TickMachineLine(Machine&, const DeviceHost&, FrameSurface, std::uint64_t ti
 void AttachMachineVideo(Machine&, const DeviceHost&, FrameSurface);
 void RenderMachineScanline(Machine&, FrameSurface, int row);
 void FinishMachinePaletteLine(Machine&, FrameSurface);
+void FinishMachineDisplay(Machine&, FrameSurface);
 void PresentMachineFrame(Machine&, const DeviceHost&, FrameSurface, std::uint64_t master_time);
 void TickMachineTimer(Machine&);
 void ResetVideoAfterLoad(Machine&, FrameSurface);

@@ -20,7 +20,7 @@ std::vector<char> encode_cpu(const PceCpu& value) {
     put(s.irq_mask, 1);
     put(s.irq_delay, 1);
     put((s.irq_sampled_before_sei ? 1 : 0) | (s.nmi_line ? 2 : 0) | (s.nmi_pending ? 4 : 0) |
-            (s.low_speed ? 8 : 0),
+            (s.low_speed ? 8 : 0) | (s.irq_read_sample <= 7 ? s.irq_read_sample << 4 : 128),
         1);
     put(s.elapsed, 8);
     put(std::uint32_t(value.line_period), 4);
@@ -61,12 +61,13 @@ bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu&
     s.irq_mask = byte(get(1));
     s.irq_delay = byte(get(1));
     const auto flags = get(1);
-    if (flags > 15 || s.irq_lines > 7 || s.irq_mask > 7 || s.irq_delay > 1)
+    if (flags > 127 || s.irq_lines > 7 || s.irq_mask > 7 || s.irq_delay > 1)
         return false;
     s.irq_sampled_before_sei = (flags & 1) != 0;
     s.nmi_line = (flags & 2) != 0;
     s.nmi_pending = (flags & 4) != 0;
     s.low_speed = (flags & 8) != 0;
+    s.irq_read_sample = byte((flags >> 4) & 7);
     s.elapsed = get(8);
     // Decode signed clock debt without implementation-defined unsigned casts.
     auto signed_clock = [&]() {
@@ -88,7 +89,8 @@ bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu&
     const auto alternate = get(1);
     t.alternate = alternate != 0;
     const bool alternating = t.opcode == 0xe3 || t.opcode == 0xf3;
-    if (alternate > 1 || t.remaining > 65536 || (!alternating && t.alternate))
+    if ((t.opcode && s.irq_read_sample) || alternate > 1 || t.remaining > 65536 ||
+        (!alternating && t.alternate))
         return false;
     switch (t.opcode) {
     case 0:
@@ -108,6 +110,8 @@ bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu&
         value.line_remaining <= 0 || value.line_remaining > line || value.timer_remaining <= 0 ||
         value.timer_remaining > timer)
         return false;
+    // Saved remaining clocks are relative to an already synchronized CPU boundary.
+    value.device_time = s.elapsed;
     result = value;
     return true;
 }

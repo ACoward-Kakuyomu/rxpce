@@ -31,7 +31,7 @@ std::wstring bios_path(const std::wstring& path) {
     return full.substr(0, full.find_last_of(L"/\\") + 1) + path;
 }
 bool prepare(const std::wstring& image, const std::wstring& bios, std::unique_ptr<Session>& output,
-             std::string& error, const ImageProgress& progress) {
+             std::string& error, const ImageProgress& progress, MediaAccess access) {
     try {
         auto next = std::make_unique<Session>();
         if (image.empty() || image.find(L'\0') != std::wstring::npos)
@@ -53,8 +53,8 @@ bool prepare(const std::wstring& image, const std::wstring& bios, std::unique_pt
             throw std::runtime_error("Expected CUE or CHD image");
         if (!load_system_card(bios_path(bios), next->bios, error))
             return false;
-        if (extension == L".chd" ? !next->disc.open_chd(next->source, error, progress)
-                                 : !next->disc.open_cue(next->source, error, progress))
+        if (extension == L".chd" ? !next->disc.open_chd(next->source, error, progress, access)
+                                 : !next->disc.open_cue(next->source, error, progress, access))
             return false;
         output = std::move(next);
         error.clear();

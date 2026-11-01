@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(rxpce VERSION 1.3.0 LANGUAGES C CXX RC)
+project(rxpce VERSION 1.4.0 LANGUAGES C CXX RC)
 
 if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8
    OR NOT CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "x64")
@@ -32,7 +32,7 @@ target_link_libraries(vdc_dma PUBLIC vdc_scan)
 add_library(machine_state STATIC src/io_state_codec.cpp src/machine_state_codec.cpp)
 target_include_directories(machine_state PUBLIC src)
 target_link_libraries(machine_state PUBLIC pce_cpu vdc_dma video_clock)
-add_library(cartridge STATIC src/cartridge.cpp src/cartridge_ram.cpp src/system_card.cpp src/nvram.cpp src/disc_image.cpp src/disc_cue.cpp src/disc_chd.cpp src/cd_controller.cpp src/cd_controller_state.cpp src/cd_state_file.cpp src/cd_session.cpp)
+add_library(cartridge STATIC src/cartridge.cpp src/cartridge_ram.cpp src/system_card.cpp src/nvram.cpp src/media_file.cpp src/disc_image.cpp src/disc_cue.cpp src/disc_chd.cpp src/cd_controller.cpp src/cd_controller_state.cpp src/cd_state_file.cpp src/cd_session.cpp)
 target_compile_features(cartridge PUBLIC cxx_std_17)
 target_include_directories(cartridge PUBLIC src)
 target_compile_definitions(cartridge PRIVATE _WIN32_WINNT=0x0A00)

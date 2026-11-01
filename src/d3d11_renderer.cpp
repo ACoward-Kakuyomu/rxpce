@@ -4,6 +4,7 @@
 #endif
 #include "d3d11_renderer.h"
 #include "video_frame.h"
+#include "video_presenter.h"
 #include "presentation_state.h"
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -32,16 +33,19 @@ struct Renderer::Impl {
             CloseHandle(frame_ready);
     }
 
-    HRESULT submit() {
+    RenderAttempt submit(std::uint64_t requested) {
         const auto status = swap->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
         if (status == DXGI_ERROR_WAS_STILL_DRAWING) {
-            presentation.submitted(PresentResult::busy);
-            return S_FALSE;
+            presentation.submitted(PresentResult::busy, requested);
+            return {S_FALSE, false};
         }
-        if (SUCCEEDED(status))
-            presentation.submitted(status == DXGI_STATUS_OCCLUDED ? PresentResult::occluded
-                                                                  : PresentResult::presented);
-        return status;
+        if (SUCCEEDED(status)) {
+            const bool complete = presentation.submitted(
+                status == DXGI_STATUS_OCCLUDED ? PresentResult::occluded : PresentResult::presented,
+                requested);
+            return {status, status == S_OK && complete};
+        }
+        return {status, false};
     }
 
     HRESULT resize(UINT w, UINT h) {
@@ -172,37 +176,49 @@ HRESULT Renderer::initialize(HWND window, int adapter_index) {
 
 HRESULT Renderer::render(const std::uint32_t* rgba, int width, int height, int scale, bool present,
                          bool nonblocking, AspectMode aspect_mode) {
+    return render_image(rgba, width, height, scale, present, nonblocking, aspect_mode, 0).status;
+}
+RenderAttempt Renderer::present_frame(const PresentationFrame& frame) {
+    if (!frame.generation || frame.width <= 0 || frame.height <= 0 || frame.width > 512 ||
+        frame.height > 256 || frame.pixels.size() < std::size_t(frame.width) * frame.height)
+        return {E_INVALIDARG, false};
+    return render_image(frame.pixels.data(), frame.width, frame.height, frame.scale, true,
+                        frame.nonblocking, frame.aspect_mode, frame.generation);
+}
+RenderAttempt Renderer::render_image(const std::uint32_t* rgba, int width, int height, int scale,
+                                     bool present, bool nonblocking, AspectMode aspect_mode,
+                                     std::uint64_t generation) {
     if (!impl || !rgba || width <= 0 || height <= 0 || width > 512 || height > 256 || scale < 0 ||
         scale > 4 || !valid_aspect_mode(aspect_mode))
-        return E_INVALIDARG;
+        return {E_INVALIDARG, false};
     auto& d = *impl;
     RECT client;
     if (!GetClientRect(d.window, &client))
-        return HRESULT_FROM_WIN32(GetLastError());
+        return {HRESULT_FROM_WIN32(GetLastError()), false};
     if (IsIconic(d.window) || client.right <= 0 || client.bottom <= 0)
-        return S_FALSE;
+        return {S_FALSE, false};
     const auto r =
         display_placement(width, height, client.right, client.bottom, scale, aspect_mode);
     if (r.width == 0 || r.height == 0)
-        return S_FALSE;
+        return {S_FALSE, false};
     if (present && d.presentation.next() == PresentAction::visibility) {
         const auto status = d.swap->Present(0, DXGI_PRESENT_TEST);
         if (status != S_OK)
-            return status;
+            return {status, false};
         d.presentation.visible(true);
     }
     if (present && d.presentation.next() == PresentAction::retry)
-        return d.submit();
+        return d.submit(generation);
     if (present && d.presentation.next() == PresentAction::acquire) {
         const auto ready = WaitForSingleObject(d.frame_ready, nonblocking ? 0 : 1);
         if (ready == WAIT_FAILED)
-            return HRESULT_FROM_WIN32(GetLastError());
+            return {HRESULT_FROM_WIN32(GetLastError()), false};
         if (!d.presentation.acquire(ready == WAIT_OBJECT_0))
-            return S_FALSE;
+            return {S_FALSE, false};
     }
     HRESULT hr = d.resize(client.right, client.bottom);
     if (FAILED(hr))
-        return hr;
+        return {hr, false};
     if (d.source_width != static_cast<unsigned>(width) ||
         d.source_height != static_cast<unsigned>(height) || !d.texture) {
         ID3D11ShaderResourceView* empty = nullptr;
@@ -220,17 +236,17 @@ HRESULT Renderer::render(const std::uint32_t* rgba, int width, int height, int s
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
         hr = d.device->CreateTexture2D(&desc, nullptr, &d.texture);
         if (FAILED(hr))
-            return hr;
+            return {hr, false};
         hr = d.device->CreateShaderResourceView(d.texture.Get(), nullptr, &d.view);
         if (FAILED(hr))
-            return hr;
+            return {hr, false};
         d.source_width = width;
         d.source_height = height;
     }
     D3D11_MAPPED_SUBRESOURCE mapped;
     hr = d.context->Map(d.texture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     if (FAILED(hr))
-        return hr;
+        return {hr, false};
     for (int row = 0; row < height; ++row)
         std::memcpy(static_cast<unsigned char*>(mapped.pData) + row * mapped.RowPitch,
                     rgba + row * width, width * 4);
@@ -256,8 +272,10 @@ HRESULT Renderer::render(const std::uint32_t* rgba, int width, int height, int s
     d.context->PSSetSamplers(0, 1, &sampler);
     d.context->Draw(3, 0);
     if (!present)
-        return S_OK;
-    return d.submit();
+        return {S_OK, false};
+    if (!d.presentation.drawn(generation))
+        return {E_UNEXPECTED, false};
+    return d.submit(generation);
 }
 
 HRESULT Renderer::readback(std::vector<std::uint32_t>& rgba) {

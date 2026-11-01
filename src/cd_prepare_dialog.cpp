@@ -34,7 +34,7 @@ void StopCdProgressDialog(HWND owner, IProgressDialog* dialog, bool owner_was_en
 
 bool PrepareCdWithProgress(HWND owner, const std::wstring& image, const std::wstring& bios,
                            std::atomic_bool& cancel, std::unique_ptr<rxpce_cd::Session>& result,
-                           std::string& error) {
+                           std::string& error, rxpce_cd::MediaAccess access) {
     Microsoft::WRL::ComPtr<IProgressDialog> dialog;
     if (FAILED(CoCreateInstance(CLSID_ProgressDialog, nullptr, CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(&dialog)))) {
@@ -56,12 +56,14 @@ bool PrepareCdWithProgress(HWND owner, const std::wstring& image, const std::wst
     try {
         worker = std::thread([&] {
             try {
-                success = rxpce_cd::prepare(image, bios, result, error,
-                                            [&](std::uint64_t d, std::uint64_t t) {
-                                                total = t;
-                                                done = d;
-                                                return !cancel.load();
-                                            });
+                success = rxpce_cd::prepare(
+                    image, bios, result, error,
+                    [&](std::uint64_t d, std::uint64_t t) {
+                        total = t;
+                        done = d;
+                        return !cancel.load();
+                    },
+                    access);
             } catch (const std::exception& ex) {
                 error = ex.what();
             }

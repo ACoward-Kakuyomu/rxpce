@@ -36,6 +36,7 @@ struct Settings {
     } folders;
     struct Cd {
         std::string bios_file;
+        bool allow_network = false;
     } cd;
     struct Advanced {
         rxpce_video::VdcMode vdc_emulation = rxpce_video::VdcMode::accurate;

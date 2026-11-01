@@ -51,9 +51,9 @@ const std::string& DiscImage::identity() const {
 }
 
 bool DiscImage::open_cue(const std::wstring& path, std::string& error,
-                         const ImageProgress& progress) {
+                         const ImageProgress& progress, MediaAccess access) {
     try {
-        auto next = Impl::open_cue(path, progress);
+        auto next = Impl::open_cue(path, progress, access);
         impl_ = std::move(next);
         error.clear();
         return true;
@@ -63,9 +63,9 @@ bool DiscImage::open_cue(const std::wstring& path, std::string& error,
     }
 }
 bool DiscImage::open_chd(const std::wstring& path, std::string& error,
-                         const ImageProgress& progress) {
+                         const ImageProgress& progress, MediaAccess access) {
     try {
-        auto next = Impl::open_chd(path, progress);
+        auto next = Impl::open_chd(path, progress, access);
         impl_ = std::move(next);
         error.clear();
         return true;

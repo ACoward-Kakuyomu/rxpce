@@ -110,9 +110,9 @@ Position parse_q(const Bytes& bytes) {
         throw std::runtime_error("Q does not contain a positional record");
     Position p;
     p.control = bytes[0] >> 4;
-    p.track = bcd(bytes[1], 99);
+    p.track = bytes[1] == 0xaa ? 0xaa : bcd(bytes[1], 99);
     p.index = bcd(bytes[2], 99);
-    if (p.track == 0 || p.index > 1) throw std::runtime_error("Unsupported Q track/index");
+    if (p.track == 0 || p.index > 1 || (p.track == 0xaa && p.index != 1)) throw std::runtime_error("Unsupported Q track/index");
     p.relative = msf(bytes.data() + 3);
     p.absolute = msf(bytes.data() + 7) - 150;
     return p;

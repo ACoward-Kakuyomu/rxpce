@@ -118,6 +118,8 @@ void scan_event(void* context, const ScanEvent& e) {
             callbacks(m).complete(&m, DmaChannel::satb, 0);
         break;
     case ScanEventKind::display_start:
+        FinishMachinePaletteLine(m, m.video_surface);
+        m.video.display_rows.fill(false);
         m.io.screen_h = s.active.vdw + 1;
         m.io.minline = 0;
         m.io.maxline = m.io.screen_h - 1;
@@ -130,6 +132,7 @@ void scan_event(void* context, const ScanEvent& e) {
             m.vdc.dma.display_start(s.burst);
         break;
     case ScanEventKind::vblank_start:
+        FinishMachineDisplay(m, m.video_surface);
         if (m.video.resume == VideoResume::drawing)
             m.video.resume = VideoResume::ready;
         m.io.bg_w = 32 << ((s.active.memory >> 4) & 3);
@@ -204,6 +207,8 @@ void WriteMachineVdcRegister(Machine& m, unsigned reg) {
 }
 void ResetMachineVdc(Machine& m) {
     m.video.line.active = false;
+    m.video.display_rows.fill(false);
+    m.video.initialized_rows.fill(false);
     m.video_clock = CpuVideoClock(m.cpu_clock_hz);
     m.vce_clock = VceClock{};
     m.frame_lines = m.vce_clock.state().frame_lines;
@@ -320,7 +325,7 @@ unsigned MachineVdcReady(Machine& m, std::uint32_t address, bool write) {
         m.vdc.cpu.kind == rxpce_video::CpuVramKind::none)
         return 0;
     const auto port = address & 3;
-    return ((!write && (port == 2 || port == 3) && m.io.vdc_reg == 2) ||
+    return ((!write && (port == 2 || port == 3)) ||
             (write && port == 3 && (m.io.vdc_reg == 2 || m.io.vdc_reg == 1)))
                ? 1
                : 0;

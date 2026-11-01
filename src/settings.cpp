@@ -259,6 +259,7 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         read(f, "state", s.folders.state);
         const auto& cd = object(field(r, "cd"));
         read(cd, "bios_file", s.cd.bios_file);
+        read(cd, "allow_network", s.cd.allow_network);
         const auto& x = object(field(r, "advanced"));
         std::string vdc_mode = "accurate";
         read(x, "vdc_emulation", vdc_mode);
@@ -313,6 +314,7 @@ std::string encode(const Settings& s) {
     f["rom"] = val(s.folders.rom);
     f["state"] = val(s.folders.state);
     cd["bios_file"] = val(s.cd.bios_file);
+    cd["allow_network"] = val(s.cd.allow_network);
     r["cd"] = picojson::value(cd);
     x["vdc_emulation"] = val(
         std::string(s.advanced.vdc_emulation == rxpce_video::VdcMode::fast ? "fast" : "accurate"));

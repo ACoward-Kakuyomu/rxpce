@@ -3,6 +3,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include "media_file.h"
 #include <bcrypt.h>
 #include <cstdint>
 #include <string>
@@ -81,9 +82,8 @@ struct File {
     Handle handle;
     std::uint64_t bytes = 0;
     BY_HANDLE_FILE_INFORMATION info{};
-    explicit File(const std::wstring& path) {
-        handle.value = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    explicit File(const std::wstring& path, MediaAccess access = MediaAccess::local_only) {
+        handle.value = open_media_file(path, access);
         if (handle.value == INVALID_HANDLE_VALUE)
             throw std::runtime_error("Cannot open referenced file (Windows error " +
                                      std::to_string(GetLastError()) + ")");

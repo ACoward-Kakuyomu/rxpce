@@ -14,7 +14,7 @@ namespace {
 std::array<rxpce_input::ControllerInput, 5> processors;
 rxpce_input::XInputPoller xinput;
 std::array<std::uint16_t, 5> previous_buttons{};
-bool previous_blocked = false, previous_background = false, previous_sprites = false;
+bool previous_blocked = false;
 unsigned log_changes = 0;
 } // namespace
 void ResetInput() {
@@ -25,7 +25,7 @@ void InitializeInput() {
     xinput.reset();
     ResetInput();
     previous_buttons.fill(0);
-    previous_blocked = previous_background = previous_sprites = false;
+    previous_blocked = false;
     log_changes = 0;
     const auto& config = rxpce_config::active_input;
     LogDumpDetail("Input configured: players=%d\n", config.count);
@@ -86,12 +86,5 @@ void PollInput(rxpce_machine::Machine& machine) {
                 LogDumpDetail("Input player %u buttons=%03x\n", n + 1, buttons[n]);
             previous_buttons[n] = buttons[n];
         }
-    const bool background = (keys['1'] & 0x80) != 0, sprites = (keys['2'] & 0x80) != 0;
-    if (background && !previous_background)
-        machine.video.background_enabled = !machine.video.background_enabled;
-    if (sprites && !previous_sprites)
-        machine.video.sprites_enabled = !machine.video.sprites_enabled;
-    previous_background = background;
-    previous_sprites = sprites;
 }
 } // namespace rxpce_host

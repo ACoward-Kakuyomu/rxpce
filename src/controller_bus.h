@@ -13,20 +13,18 @@ struct ControllerBus {
         if (count > 1)
             port = 5; // No tap port is selected until the first CLR reset.
     }
-    void activate() {
-        if (port < count && modes[port] == 6)
-            phase[port] ^= 1;
-    }
     void write(std::uint8_t value) {
         const unsigned next_sel = value & 1, next_clr = (value >> 1) & 1;
+        // SEL/CLR reach every connected pad, independently of the tap's read port.
+        if (clr && !next_clr && sel && next_sel)
+            for (unsigned n = 0; n < phase.size(); ++n)
+                if (n < count && modes[n] == 6)
+                    phase[n] ^= 1;
         if (count > 1 && next_sel && next_clr && !clr)
             port = 0;
-        if (clr && !next_clr && sel && next_sel)
-            activate();
         else if (count > 1 && !clr && !next_clr && !sel && next_sel) {
             if (port < 5)
                 ++port;
-            activate();
         }
         sel = static_cast<std::uint8_t>(next_sel);
         clr = static_cast<std::uint8_t>(next_clr);

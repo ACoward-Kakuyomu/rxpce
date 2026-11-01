@@ -27,6 +27,13 @@ rxpce_cpu::Bus Machine::bus() noexcept {
                               return MachineVdcReady(*static_cast<Machine*>(context), address,
                                                      write);
                           }};
+    result.read_irq_lines = [](std::uint32_t, void* context) -> std::uint8_t {
+        const auto& machine = *static_cast<Machine*>(context);
+        return machine.io.irq_status & ~machine.io.irq_mask & 7;
+    };
+    // All VDC status aliases; ordinary RAM/ROM reads avoid the callback.
+    result.irq_read_mask = 0x1ffc03;
+    result.irq_read_match = 0x1fe000;
     if (vdc_mode == rxpce_video::VdcMode::fast) {
         result.synchronize = nullptr;
         result.ready = nullptr;

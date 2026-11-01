@@ -1,6 +1,7 @@
 #include "win32_support.h"
 #include "wasapi.h"
 #include "wasapi_stream.h"
+#include "audio_error_log.h"
 #include "Sound.h"
 #include "log.h"
 #include "unique_handle.h"
@@ -46,6 +47,16 @@ class AudioTask {
   private:
     HANDLE value_ = nullptr;
 };
+void report_error(rxpce_audio::ErrorLog::Event event) noexcept {
+    using Kind = rxpce_audio::ErrorLog::Kind;
+    if (event.kind == Kind::failure)
+        LogDump("WASAPI error: %08lx\n", static_cast<unsigned long>(event.code));
+    else if (event.kind == Kind::repeated)
+        LogDump("WASAPI repeated error: %08lx count=%llu\n",
+                static_cast<unsigned long>(event.code), static_cast<unsigned long long>(event.count));
+    else
+        LogDump("WASAPI recovered after error: %08lx\n", static_cast<unsigned long>(event.code));
+}
 struct Session {
     ComPtr<IMMDeviceEnumerator> enumerator;
     ComPtr<IMMDevice> device;
@@ -121,7 +132,7 @@ struct Session {
             sample_rate, channel_count, latency, capacity, target);
         return S_OK;
     }
-    HRESULT run() {
+    HRESULT run(rxpce_audio::ErrorLog& errors) {
         const HANDLE events[] = {stop_event.get(), event.get()};
         for (;;) {
             const auto wake = WaitForMultipleObjects(2, events, FALSE, 1000);
@@ -132,6 +143,7 @@ struct Session {
             const auto status = service();
             if (FAILED(status))
                 return status;
+            if (errors.active()) errors.success(GetTickCount64(), report_error);
         }
     }
 };
@@ -146,6 +158,7 @@ unsigned __stdcall play(void*) {
     }
     AudioTask task;
     bool first = true;
+    rxpce_audio::ErrorLog errors;
     try {
         for (;;) {
             HRESULT status;
@@ -157,10 +170,10 @@ unsigned __stdcall play(void*) {
                     SetEvent(ready_event.get());
                 }
                 if (SUCCEEDED(status))
-                    status = session.run();
+                    status = session.run(errors);
             }
             if (FAILED(status))
-                LogDump("WASAPI error: %08lx\n", status);
+                errors.error(static_cast<std::uint32_t>(status), GetTickCount64(), report_error);
             if (first && FAILED(initial_status.load()))
                 break;
             first = false;
@@ -174,6 +187,7 @@ unsigned __stdcall play(void*) {
         }
         LogDump("WASAPI playback exception\n");
     }
+    errors.finish(report_error);
     return 0;
 }
 } // namespace

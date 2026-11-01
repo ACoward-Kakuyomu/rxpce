@@ -37,6 +37,13 @@ class Discovery {
         position = parse_q(rawQ);
         // The observed device returns Q two sectors behind main data in MODE1.
         // Never silently relabel Q as belonging to the requested address.
+        if (position.track == 0xaa) {
+            if (std::abs(position.absolute - request) > 8 ||
+                position.absolute < result.toc.leadout ||
+                position.absolute - position.relative != result.toc.leadout)
+                throw std::runtime_error("Leadout Q disagrees with the read request/TOC");
+            return false; // Valid out-of-range Q is not evidence for a program boundary.
+        }
         if (std::abs(position.absolute - request) > 8 || position.absolute < -150 ||
             position.absolute >= result.toc.leadout || position.track > result.toc.tracks.size())
             throw std::runtime_error("Q address is inconsistent with the read request/TOC");
@@ -55,6 +62,13 @@ class Discovery {
             Position p;
             if (sample(request + static_cast<std::int32_t>(n), p))
                 return {request + static_cast<std::int32_t>(n), p};
+        }
+        // A forward Q offset can place every remaining forward request in leadout.
+        // Preserve actual Q addresses and try the bounded preceding requests.
+        for (unsigned n = 1; n <= 8 && request >= static_cast<std::int32_t>(n); ++n) {
+            Position p;
+            const auto preceding = request - static_cast<std::int32_t>(n);
+            if (sample(preceding, p)) return {preceding, p};
         }
         throw std::runtime_error("No positional Q near the requested sector");
     }

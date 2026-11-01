@@ -88,6 +88,15 @@ PceCpuResult RunPceCpu(PceCpu& state, const PceCpuHost& host) {
                    return x.host.bus.ready ? x.host.bus.ready(a, w, x.host.bus.context) : 0;
                }};
     }
+    if (host.bus.read_irq_lines) {
+        if (bus.context == &access)
+            bus.read_irq_lines = [](std::uint32_t a, void* p) {
+                const auto& x = *static_cast<Access*>(p);
+                return x.host.bus.read_irq_lines(a, x.host.bus.context);
+            };
+        bus.irq_read_mask = host.bus.irq_read_mask;
+        bus.irq_read_match = host.bus.irq_read_match;
+    }
     bus.synchronize_prefix = [](std::uint64_t t, void* p) {
         auto& x = *static_cast<Access*>(p);
         if (t > x.cpu.device_time)

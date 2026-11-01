@@ -255,8 +255,11 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path) {
     try {
         rxpce_config::DialogInputScope input;
         ::SetCursor(::LoadCursor(nullptr, IDC_ARROW));
-        ready = PrepareCdWithProgress(m_hWnd, path, rxpce_config::to_wide(m_config.cd.bios_file),
-                                      m_cancelPrepare, session, error);
+        ready =
+            PrepareCdWithProgress(m_hWnd, path, rxpce_config::to_wide(m_config.cd.bios_file),
+                                  m_cancelPrepare, session, error,
+                                  m_config.cd.allow_network ? rxpce_cd::MediaAccess::allow_network
+                                                            : rxpce_cd::MediaAccess::local_only);
     } catch (...) {
         m_preparing = false;
         if (m_closeAfterPrepare) {

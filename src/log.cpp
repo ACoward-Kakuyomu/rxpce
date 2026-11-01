@@ -4,6 +4,8 @@
 #include "log.h"
 #include "file_paths.h"
 #include "async_log.h"
+#include "file_log.h"
+#include <memory>
 #include <windows.h>
 #include <cstdarg>
 #include <cstdio>
@@ -20,10 +22,9 @@ struct LogState;
 void write_file(LogState& log, std::string_view text);
 struct LogState {
     std::atomic_bool detail{true};
-    bool prepared = false;
     bool rotation_attempted = false;
     std::filesystem::path path = rxpce_paths::executable().parent_path() / L"rxpce.log";
-    std::ofstream file;
+    std::unique_ptr<rxpce_log::FileWriter<>> file;
     rxpce_log::AsyncWriter writer;
     LogState() : writer([this](std::string_view text) { write_file(*this, text); }) {}
 };
@@ -61,11 +62,6 @@ void prepare(LogState& log) {
             std::filesystem::rename(log.path, backup, error);
         }
     }
-    log.file.clear();
-    log.file.open(log.path, std::ios::binary | std::ios::trunc);
-    if (!log.file)
-        throw std::runtime_error("Cannot open diagnostic log");
-    log.prepared = true;
     FILETIME created{}, exited{}, kernel{}, user{};
     GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user);
     ULARGE_INTEGER stamp{};
@@ -76,7 +72,7 @@ void prepare(LogState& log) {
                                     GetCurrentProcessId(), stamp.QuadPart);
     if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(header))
         throw std::runtime_error("Cannot format diagnostic session");
-    log.file.write(header, count);
+    log.file = std::make_unique<rxpce_log::FileWriter<>>(log.path, std::string(header, count));
 }
 #ifdef _DEBUG
 void debug_message(std::string_view text) {
@@ -94,15 +90,12 @@ void debug_message(std::string_view text) {
 }
 #endif
 void write_file(LogState& log, std::string_view text) {
-    if (!log.prepared)
+    if (!log.file)
         prepare(log);
-    log.file.write(text.data(), static_cast<std::streamsize>(text.size()));
-    log.file.flush();
+    (*log.file)(text);
 #ifdef _DEBUG
     debug_message(text);
 #endif
-    if (!log.file)
-        throw std::runtime_error("Cannot write diagnostic log");
 }
 void write_message(bool detail, const char* format, std::va_list args) {
     auto& log = state();

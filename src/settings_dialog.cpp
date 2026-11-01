@@ -43,6 +43,7 @@ enum {
     bios,
     bios_browse,
     bios_info,
+    allow_network_media,
     clock_edit = 2200,
     log_enabled,
     fps,
@@ -296,7 +297,10 @@ LRESULT SettingsDialog::OnInit(UINT, WPARAM, LPARAM, BOOL&) {
         add(3, L"EDIT", L"", bios, 20, 116, 330, 14, edit, WS_EX_CLIENTEDGE);
         set_text(bios, value.cd.bios_file);
         add(3, L"BUTTON", L"...", bios_browse, 358, 116, 32, 14, WS_TABSTOP);
-        add(3, L"STATIC", L"", bios_info, 20, 134, 370, 12, 0);
+        add(3, L"STATIC", L"", bios_info, 20, 134, 176, 12, 0);
+        add(3, L"BUTTON", L"Allow network CD images", allow_network_media, 200, 132, 190, 14,
+            WS_TABSTOP | BS_AUTOCHECKBOX);
+        CheckDlgButton(allow_network_media, value.cd.allow_network);
         bios_description(m_hWnd, value.cd.bios_file);
         label(4, L"Base clock (Hz)", 20, 32);
         add(4, L"EDIT", L"", clock_edit, 130, 30, 130, 14, edit | ES_NUMBER, WS_EX_CLIENTEDGE);
@@ -638,6 +642,7 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
             value.advanced.log = IsDlgButtonChecked(log_enabled) != 0;
             value.advanced.show_fps = IsDlgButtonChecked(fps) != 0;
             value.cd.bios_file = text(bios);
+            value.cd.allow_network = IsDlgButtonChecked(allow_network_media) != 0;
             std::string error;
             if (!validate(value, error))
                 throw std::runtime_error(error);

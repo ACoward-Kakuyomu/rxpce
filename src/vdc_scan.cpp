@@ -7,6 +7,19 @@ namespace {
 // BXR is held ahead of display for background prefetch. This is a bounded
 // timing approximation; short back porches hold it at their start.
 constexpr unsigned bxr_prefetch_dots = 20;
+constexpr unsigned byr_prefetch_dots = 21;
+void latch_y(VdcScanState& s) {
+    if (s.v_phase != VPeriod::display)
+        return;
+    if (s.row == 0)
+        s.y_counter = s.requested.y_scroll & 511;
+    else if (s.y_pending)
+        s.y_counter = (s.requested.y_scroll + 1) & 511;
+    else
+        s.y_counter = (s.y_counter + 1) & 511;
+    s.active.y_scroll = s.requested.y_scroll & 511;
+    s.y_pending = false;
+}
 unsigned horizontal_length(const VdcScanState& s) {
     switch (s.h_phase) {
     case HPeriod::sync:
@@ -94,23 +107,15 @@ void VdcScan::enter_horizontal(HPeriod period, Sink sink, void* context) {
         break;
     case HPeriod::back:
         s.active.hsr = (s.active.hsr & 31) | (r.hsr & 0x7f00);
+        s.active.control = r.control & 0xc0;
+        if (horizontal_length(s) <= byr_prefetch_dots)
+            latch_y(s);
         if (horizontal_length(s) <= bxr_prefetch_dots)
             s.active.x_scroll = r.x_scroll & 1023;
         kind = ScanEventKind::h_back_start;
         break;
     case HPeriod::display:
         s.active.hdr = (s.active.hdr & 0x7f00) | (r.hdr & 127);
-        s.active.control = r.control & 0xc0;
-        if (s.v_phase == VPeriod::display) {
-            if (s.row == 0)
-                s.y_counter = r.y_scroll & 511;
-            else if (s.y_pending)
-                s.y_counter = (r.y_scroll + 1) & 511;
-            else
-                s.y_counter = (s.y_counter + 1) & 511;
-            s.active.y_scroll = r.y_scroll & 511;
-            s.y_pending = false;
-        }
         kind = ScanEventKind::h_display_start;
         break;
     case HPeriod::front:
@@ -230,6 +235,9 @@ void VdcScan::advance_to(std::uint64_t target, Sink sink, void* context) {
         const auto delta = (std::min)(target - s.dot_time, std::uint64_t(s.h_remaining));
         // No CPU deadline is needed: only the later row composition consumes
         // this value, and register writes synchronize the scan before changing it.
+        if (s.h_phase == HPeriod::back && s.h_remaining > byr_prefetch_dots &&
+            s.h_remaining - delta <= byr_prefetch_dots)
+            latch_y(s);
         if (s.h_phase == HPeriod::back && s.h_remaining > bxr_prefetch_dots &&
             s.h_remaining - delta <= bxr_prefetch_dots)
             s.active.x_scroll = s.requested.x_scroll & 1023;

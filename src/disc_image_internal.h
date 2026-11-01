@@ -17,7 +17,7 @@ struct DiscImage::Impl {
     virtual const unsigned char* read(std::size_t track, std::uint64_t sector) = 0;
     struct Cue;
     struct Chd;
-    static std::unique_ptr<Impl> open_cue(const std::wstring&, const ImageProgress&);
-    static std::unique_ptr<Impl> open_chd(const std::wstring&, const ImageProgress&);
+    static std::unique_ptr<Impl> open_cue(const std::wstring&, const ImageProgress&, MediaAccess);
+    static std::unique_ptr<Impl> open_chd(const std::wstring&, const ImageProgress&, MediaAccess);
 };
 } // namespace rxpce_cd
