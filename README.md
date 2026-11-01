@@ -1,5 +1,9 @@
 # rxpce 1.3.0
 
+公開済み1.3.0の後の開発版です。版番号は1.3.0のまま、枠のちらつき・表示停止中の不正パターン・スクロール反映時期を修正しています。ゲーム内セーブと設定は引き続き利用できます。
+
+This is a development build after the published 1.3.0 release. The version number remains 1.3.0, with fixes for frame flicker, patterns shown during display blanking and scroll timing. In-game saves and settings remain usable.
+
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
 詳しい操作・設定・保存ファイルの説明は[操作説明書](MANUAL.md)を参照してください。
@@ -65,7 +69,7 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 特殊な背景・スプライトモードとVRAM書込みを改善し、表示が乱れる問題を修正しました。スプライトの描画制限を選択する設定を追加しています。Accurateでは走査線途中のパレット変更を反映し、ステート復帰後の不完全な映像の提示も抑えます。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-**正式版1.2.0以前のステートは1.3.0では読み込めません。** 更新後はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
+**この開発版では正式版1.3.0以前のステートは読み込めません。** 更新後はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
 ### セーブデータと更新
 
@@ -137,9 +141,9 @@ Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F
 
 ### Changes in 1.3.0
 
-Improved special background and sprite modes and VRAM writes to fix display corruption. Added an optional hardware sprite drawing limit. Accurate now applies palette changes within a scanline, and state loading avoids presenting incomplete restored images. See the [release notes](RELEASE_NOTES.md#english) for details.
+Improved special background and sprite modes and VRAM writes to fix display corruption. Added an optional hardware sprite drawing limit. Accurate now applies palette changes within a scanline, and state loading avoids presenting incomplete restored images. See the [release notes](RELEASE_NOTES.md#english-unreleased) for details.
 
-**Save states from official releases 1.2.0 and earlier cannot be loaded in 1.3.0.** Start games normally and create new states after updating. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
+**This development build cannot load save states from official releases 1.3.0 and earlier.** Start games normally and create new states after updating. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
 ### Save data and updates
 

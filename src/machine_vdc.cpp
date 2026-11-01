@@ -148,7 +148,7 @@ void scan_event(void* context, const ScanEvent& e) {
     case ScanEventKind::h_front_start: {
         FinishMachinePaletteLine(m, m.video_surface);
         constexpr unsigned costs[] = {4, 4, 8, 16};
-        if (m.vdc_mode == VdcMode::accurate && (s.active.control & 0x40))
+        if (!s.burst && m.vdc_mode == VdcMode::accurate && (s.active.control & 0x40))
             m.vdc.sprite_fetch_remaining = static_cast<std::uint16_t>(
                 m.vdc.sprite_fetch_cells * costs[(s.active.memory >> 2) & 3]);
         break;
@@ -164,7 +164,7 @@ void scan_event(void* context, const ScanEvent& e) {
         break;
     case ScanEventKind::display_line: {
         m.scanline = e.row;
-        const auto plan = ((s.active.control & 0x40) || (m.io.vdc[CR].value & 3))
+        const auto plan = !s.burst && ((s.active.control & 0x40) || (m.io.vdc[CR].value & 3))
                               ? EvaluateMachineSprites(m, e.row)
                               : SpriteLinePlan{};
         m.vdc.sprite_fetch_cells = m.vdc_mode == VdcMode::accurate && (s.active.control & 0x40)
@@ -172,7 +172,7 @@ void scan_event(void* context, const ScanEvent& e) {
                                        : 0;
         if ((m.io.vdc[CR].value & 2) && plan.overflow)
             raise(VDC_Over);
-        if ((m.io.vdc[CR].value & 1) &&
+        if (!s.burst && (m.io.vdc[CR].value & 1) &&
             SpritesCollide(
                 m, plan,
                 {e.row, 0, int(s.active.vdw), int((s.active.hdr & 127) + 1) * 8, s.active.memory}))

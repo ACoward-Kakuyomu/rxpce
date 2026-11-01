@@ -40,7 +40,7 @@ inline void set_palette_color(Pixel* palette, unsigned index, unsigned raw) {
     if (index == 0) {
         for (unsigned i = 0; i < 256; i += 16)
             palette[i] = color;
-    } else if (index < 512 && (index & 15))
+    } else if (index < 512 && ((index & 15) || index == 256))
         palette[index] = color;
 }
 

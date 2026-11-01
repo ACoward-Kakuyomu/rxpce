@@ -64,7 +64,7 @@ namespace {
 void before_palette_write(Machine& m, unsigned entry, rxpce_video::Pixel color) {
     auto& line = m.video.line;
     if (m.vdc_mode != rxpce_video::VdcMode::accurate || !line.active ||
-        line.committed == frame_width || (entry && !(entry & 15)) ||
+        line.committed == frame_width || (entry && entry != 256 && !(entry & 15)) ||
         m.video.palette[entry] == color)
         return;
     if (!line.used_valid) {

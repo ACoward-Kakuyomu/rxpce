@@ -4,6 +4,9 @@
 #include <stdexcept>
 namespace rxpce_video {
 namespace {
+// BXR is held ahead of display for background prefetch. This is a bounded
+// timing approximation; short back porches hold it at their start.
+constexpr unsigned bxr_prefetch_dots = 20;
 unsigned horizontal_length(const VdcScanState& s) {
     switch (s.h_phase) {
     case HPeriod::sync:
@@ -91,12 +94,13 @@ void VdcScan::enter_horizontal(HPeriod period, Sink sink, void* context) {
         break;
     case HPeriod::back:
         s.active.hsr = (s.active.hsr & 31) | (r.hsr & 0x7f00);
+        if (horizontal_length(s) <= bxr_prefetch_dots)
+            s.active.x_scroll = r.x_scroll & 1023;
         kind = ScanEventKind::h_back_start;
         break;
     case HPeriod::display:
         s.active.hdr = (s.active.hdr & 0x7f00) | (r.hdr & 127);
         s.active.control = r.control & 0xc0;
-        s.active.x_scroll = r.x_scroll & 1023;
         if (s.v_phase == VPeriod::display) {
             if (s.row == 0)
                 s.y_counter = r.y_scroll & 511;
@@ -119,13 +123,16 @@ void VdcScan::enter_horizontal(HPeriod period, Sink sink, void* context) {
     s.h_remaining = static_cast<std::uint16_t>(horizontal_length(s));
     if (period != HPeriod::waiting)
         emit(kind, sink, context);
+    // RCR is tested near the end of horizontal display. Use its existing
+    // end boundary as an approximation: a start-of-display IRQ lets its
+    // handler change the next row's scroll too early.
+    if (period == HPeriod::front && s.raster == (r.raster & 1023))
+        emit(ScanEventKind::raster_match, sink, context);
     if (period == HPeriod::display) {
         if (s.vblank_pending) {
             s.vblank_pending = false;
             emit(ScanEventKind::vblank_irq, sink, context);
         }
-        if (s.raster == (r.raster & 1023))
-            emit(ScanEventKind::raster_match, sink, context);
         if (s.v_phase == VPeriod::display)
             emit(ScanEventKind::display_line, sink, context);
     }
@@ -221,6 +228,11 @@ void VdcScan::advance_to(std::uint64_t target, Sink sink, void* context) {
             break;
         }
         const auto delta = (std::min)(target - s.dot_time, std::uint64_t(s.h_remaining));
+        // No CPU deadline is needed: only the later row composition consumes
+        // this value, and register writes synchronize the scan before changing it.
+        if (s.h_phase == HPeriod::back && s.h_remaining > bxr_prefetch_dots &&
+            s.h_remaining - delta <= bxr_prefetch_dots)
+            s.active.x_scroll = s.requested.x_scroll & 1023;
         s.dot_time += delta;
         s.h_remaining -= static_cast<std::uint16_t>(delta);
         if (!s.h_remaining)

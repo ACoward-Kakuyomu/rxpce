@@ -701,10 +701,12 @@ void ComposePaletteLine(Machine& m, PaletteLine& line, int row) {
         throw std::invalid_argument("Invalid palette row");
     DrawSurface<PaletteEntry> surface{line.entries.data(), line.entries.size(), y, 1};
     const auto& s = m.vdc.scan.state();
-    const auto control = s.active.control;
+    const auto control = static_cast<std::uint16_t>(s.burst ? 0 : s.active.control);
     const auto plan =
         (control & 0x40) ? EvaluateMachineDrawingSprites(m, row) : rxpce_video::SpriteLinePlan{};
     ClearVideoRowsImpl(m, surface, row, row, entries.data());
+    if (s.burst)
+        line.entries.fill(PaletteEntry(256)); // VD0..7=0, SPBG=1; no display VRAM fetches.
     m.video.uses_sprite_priority = 0;
     if ((control & 0x40) && m.video.sprites_enabled)
         RenderSpriteLineImpl(m, surface, row, 0, plan, s.active.memory, entries.data());
