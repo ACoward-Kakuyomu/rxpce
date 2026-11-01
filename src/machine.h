@@ -11,6 +11,7 @@
 #include "vdc_device.h"
 #include "vce_clock.h"
 #include "machine_devices.h"
+#include "palette_line.h"
 #include <array>
 #include <memory>
 #include <string>
@@ -19,7 +20,11 @@
 
 namespace rxpce_machine {
 constexpr unsigned frame_width = 576, frame_height = 256;
+// Host presentation fence after state restoration; excluded from snapshots.
+enum class VideoResume { ready, waiting, drawing };
 struct VideoState {
+    VideoResume resume = VideoResume::ready;
+    PaletteLine line; // Host-only composition state; never serialized.
     std::array<std::int16_t, 256> sprites{};
     std::array<rxpce_video::Pixel, 512> palette{};
     std::array<std::uint8_t, frame_width * frame_height> priority{};
@@ -48,6 +53,8 @@ class Machine {
 
     Configuration configuration;
     rxpce_video::VdcMode vdc_mode = rxpce_video::VdcMode::accurate;
+    // Host drawing policy, excluded from snapshots and hardware evaluation.
+    bool hardware_sprite_limit = true;
     std::array<std::uint8_t, main_ram_bytes> ram{};
     std::array<std::uint8_t, backup_ram_bytes> backup_ram{};
     std::array<std::uint8_t, 32768> populous{};

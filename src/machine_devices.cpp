@@ -26,6 +26,7 @@ void TraceHost(const DeviceHost& host, const char* format, ...) {
 #endif
 } // namespace
 void AttachMachineVideo(Machine& m, const DeviceHost& host, FrameSurface frame) {
+    m.video.line.active = false;
     m.video_ports = host;
     m.video_surface = frame;
     m.video.output_bound = true;
@@ -33,6 +34,8 @@ void AttachMachineVideo(Machine& m, const DeviceHost& host, FrameSurface frame) 
     m.video.render_frame = m.video.next_render;
 }
 void ResetVideoAfterLoad(Machine& m, FrameSurface frame) {
+    m.video.resume = VideoResume::waiting;
+    m.video.line.active = false;
     m.video.render_frame = m.video.next_render = false;
     m.video.row_bias =
         (std::max)(0, ((std::min)(m.io.screen_h, m.frame_lines) - int(frame_height)) / 2);
@@ -49,7 +52,42 @@ DisplayRectangle VisibleRectangle(const Machine& m) {
     const auto height = (std::min)(MAXDISP + 1, rows);
     return {(int(frame_width) - m.io.screen_w) / 2, (rows - height) / 2, m.io.screen_w, height};
 }
+void FinishMachinePaletteLine(Machine& m, FrameSurface frame) {
+    auto& line = m.video.line;
+    if (!line.active)
+        return;
+    if (frame.pixels)
+        ResolvePaletteLine(line, frame, m.video.palette, frame_width);
+    line.active = false;
+}
+namespace {
+void before_palette_write(Machine& m, unsigned entry, rxpce_video::Pixel color) {
+    auto& line = m.video.line;
+    if (m.vdc_mode != rxpce_video::VdcMode::accurate || !line.active ||
+        line.committed == frame_width || (entry && !(entry & 15)) ||
+        m.video.palette[entry] == color)
+        return;
+    if (!line.used_valid) {
+        line.used.fill(0);
+        for (const auto e : line.entries)
+            line.used[e.index() >> 6] |= std::uint64_t{1} << (e.index() & 63);
+        line.used_valid = true;
+    }
+    if (!(line.used[entry >> 6] & (std::uint64_t{1} << (entry & 63))))
+        return;
+    const auto now = m.vce_clock.state().master_time;
+    const auto pixels =
+        now <= line.start_master
+            ? 0
+            : (std::min)(std::uint64_t(line.width), (now - line.start_master) / line.divider);
+    const auto end = (frame_width - line.width) / 2 + static_cast<unsigned>(pixels);
+    if (end > line.committed)
+        ResolvePaletteLine(line, m.video_surface, m.video.palette, end);
+}
+} // namespace
 void RenderMachineScanline(Machine& m, FrameSurface frame, int row) {
+    FinishMachinePaletteLine(m, frame);
+    m.video.line.active = false;
     if (!m.video.render_frame || !frame.pixels || row < m.video.row_bias ||
         row >= m.video.row_bias + int(frame_height))
         return;
@@ -57,30 +95,20 @@ void RenderMachineScanline(Machine& m, FrameSurface frame, int row) {
     const auto output = row - m.video.row_bias;
     if (output < area.y || output >= area.y + area.height)
         return;
-    const auto control = m.vdc.scan.state().active.control;
-    const auto plan =
-        (control & 0x40) ? EvaluateMachineSprites(m, row) : rxpce_video::SpriteLinePlan{};
-    ClearVideoRows(m, frame, row, row);
-    m.video.uses_sprite_priority = 0;
-    if ((control & 0x40) && m.video.sprites_enabled)
-        RenderSpriteLine(m, frame, row, 0, plan);
-    const auto& scan = m.vdc.scan.state();
-    RenderBackground(m, frame, row, row,
-                     {scan.active.control, scan.active.x_scroll, int(scan.y_counter) - row});
-    if ((control & 0x40) && m.video.sprites_enabled)
-        RenderSpriteLine(m, frame, row, 1, plan);
-    if (m.vce_clock.state().control & 0x80) {
-        auto* pixels = frame.pixels + output * frame_width;
-        for (unsigned x = 0; x < frame_width; ++x)
-            pixels[x] |= rxpce_video::monochrome_bit;
-    }
+    ComposePaletteLine(m, m.video.line, row);
+    const auto end = m.vdc_mode == rxpce_video::VdcMode::accurate
+                         ? (frame_width - m.video.line.width) / 2
+                         : frame_width;
+    ResolvePaletteLine(m.video.line, frame, m.video.palette, end);
 }
 void PresentMachineFrame(Machine& m, const DeviceHost& host, FrameSurface frame,
                          std::uint64_t master) {
+    FinishMachinePaletteLine(m, frame);
     if (host.sync_audio)
         host.sync_audio(host.context,
                         static_cast<std::uint32_t>(m.video_clock.cpu_deadline(master)));
-    if (m.video.render_frame && host.present && frame.pixels)
+    if (m.video.resume == VideoResume::ready && m.video.render_frame && host.present &&
+        frame.pixels)
         host.present(host.context, frame, VisibleRectangle(m));
     m.video.next_render = host.frame_start ? host.frame_start(host.context, master)
                                            : (!host.begin_frame || host.begin_frame(host.context));
@@ -150,11 +178,18 @@ void WriteMachineIo(Machine& machine, const DeviceHost& host, std::uint16_t A, s
             machine.io.vce_reg.set_high(V & 1);
             return;
         case 4:
+            before_palette_write(machine, machine.io.vce_reg.value,
+                                 static_cast<rxpce_video::Pixel>(
+                                     (machine.io.vce[machine.io.vce_reg.value].value & 256) | V));
             machine.io.vce[machine.io.vce_reg.value].set_low(V);
             rxpce_video::set_palette_color(machine.video.palette.data(), machine.io.vce_reg.value,
                                            machine.io.vce[machine.io.vce_reg.value].value);
             return;
         case 5:
+            before_palette_write(
+                machine, machine.io.vce_reg.value,
+                static_cast<rxpce_video::Pixel>(
+                    (machine.io.vce[machine.io.vce_reg.value].value & 255) | ((V & 1) << 8)));
             machine.io.vce[machine.io.vce_reg.value].set_high(V);
             rxpce_video::set_palette_color(machine.video.palette.data(), machine.io.vce_reg.value,
                                            machine.io.vce[machine.io.vce_reg.value].value);

@@ -12,17 +12,20 @@ struct FrameSurface {
 struct BackgroundRegisters {
     std::uint16_t control, x_scroll;
     int y_offset;
+    std::uint16_t memory = 0;
 };
 struct SpriteDisplay {
     int row, first, last, width;
+    std::uint16_t memory = 0;
 };
 // Background and clear use inclusive last rows; sprite lines use explicit plans.
 void RenderBackground(Machine&, FrameSurface, int first, int last, const BackgroundRegisters&);
 void ClearVideoRows(Machine&, FrameSurface, int first, int last);
 // Select a row using the active VDC mode and horizontal fetch limits.
 rxpce_video::SpriteLinePlan EvaluateMachineSprites(const Machine&, int row);
+rxpce_video::SpriteLinePlan EvaluateMachineDrawingSprites(const Machine&, int row);
 void RenderSpriteLine(Machine&, FrameSurface, int row, unsigned priority,
-                      const rxpce_video::SpriteLinePlan&);
+                      const rxpce_video::SpriteLinePlan&, std::uint16_t memory = 0);
 // Evaluate opaque sprite-zero overlap on Machine::scanline in the VDC display area.
 bool SpritesCollide(const Machine&, const rxpce_video::SpriteLinePlan&, const SpriteDisplay&);
 } // namespace rxpce_machine

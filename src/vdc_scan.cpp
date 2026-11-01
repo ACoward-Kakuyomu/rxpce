@@ -152,7 +152,7 @@ void VdcScan::enter_vertical(VPeriod period, Sink sink, void* context) {
         break;
     case VPeriod::front:
         s.active.vcr = r.vcr & 255;
-        s.active.memory = r.memory;
+        s.active.memory = (r.memory & ~0x80u) | (s.active.memory & 0x80);
         s.vblank_pending = true;
         kind = ScanEventKind::vblank_start;
         break;
@@ -177,6 +177,7 @@ void VdcScan::begin_line(Sink sink, void* context) {
         throw std::invalid_argument("Invalid external VDC line edge");
     s.last_line_dot = s.dot_time;
     ++s.physical_line;
+    s.active.memory = (s.active.memory & ~0x80u) | (s.requested.memory & 0x80);
     enter_horizontal(HPeriod::sync, sink, context);
     s.raster = (s.raster + 1) & 1023;
     if (s.v_phase == VPeriod::back && s.v_remaining == 2)

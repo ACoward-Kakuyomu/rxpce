@@ -30,7 +30,6 @@ struct CpuVramAccess {
     CpuVramKind kind = CpuVramKind::none;
     std::uint16_t address = 0, value = 0, read_buffer = 0;
     std::uint8_t elapsed = 0;
-    std::uint16_t increment = 1;
 };
 bool valid_dma(const VdcDmaState&) noexcept;
 class VdcDma {

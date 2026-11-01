@@ -13,7 +13,7 @@ struct VdcSnapshot {
     std::uint16_t sprite_fetch_remaining = 0;
     std::uint8_t fast_satb_lines = 0;
 };
-constexpr std::size_t vdc_state_bytes = 121;
+constexpr std::size_t vdc_state_bytes = 119;
 bool valid_vdc(const VdcSnapshot&, std::string& error);
 std::vector<char> encode_vdc(const VdcSnapshot&);
 bool decode_vdc(const char*, std::size_t, VdcSnapshot&, std::string& error);

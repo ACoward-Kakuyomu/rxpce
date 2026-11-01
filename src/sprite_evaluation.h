@@ -13,7 +13,8 @@ struct SpriteCell {
     std::uint8_t satb_index = 0, screen_cell = 0, source_cell = 0, row = 0;
 };
 struct SpriteLinePlan {
-    std::array<SpriteCell, 16> cells{};
+    // 64 SATB entries, each at most two 16-dot cells (drawing override).
+    std::array<SpriteCell, 128> cells{};
     unsigned count = 0, requested_cells = 0;
     bool overflow = false;
 };
@@ -29,9 +30,12 @@ inline SpriteLineLimits SpriteLimitsFromRegisters(std::uint16_t hsr, std::uint16
 }
 // Geometry only: no pixels, host visibility, IRQ state or persistent latches.
 inline SpriteLinePlan EvaluateSpriteLine(const SpriteSatb& satb, int line,
-                                         SpriteLineLimits limits = {}) {
+                                         SpriteLineLimits limits = {}, bool enforce_limit = true) {
     if (limits.search_entries > 64 || limits.fetch_cells > 16)
         throw std::invalid_argument("Invalid sprite line limits");
+    // Only presentation may relax these limits; device evaluation uses the default.
+    if (!enforce_limit)
+        limits = {64, 128};
     SpriteLinePlan plan;
     constexpr int heights[] = {16, 32, 64, 64};
     for (unsigned n = 0; n < limits.search_entries; ++n) {

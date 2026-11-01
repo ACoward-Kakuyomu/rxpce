@@ -262,6 +262,7 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         const auto& x = object(field(r, "advanced"));
         std::string vdc_mode = "accurate";
         read(x, "vdc_emulation", vdc_mode);
+        read(x, "hardware_sprite_limit", s.advanced.hardware_sprite_limit);
         require(vdc_mode == "accurate" || vdc_mode == "fast", "Invalid VDC emulation mode");
         s.advanced.vdc_emulation =
             vdc_mode == "fast" ? rxpce_video::VdcMode::fast : rxpce_video::VdcMode::accurate;
@@ -315,6 +316,7 @@ std::string encode(const Settings& s) {
     r["cd"] = picojson::value(cd);
     x["vdc_emulation"] = val(
         std::string(s.advanced.vdc_emulation == rxpce_video::VdcMode::fast ? "fast" : "accurate"));
+    x["hardware_sprite_limit"] = val(s.advanced.hardware_sprite_limit);
     x["base_clock_hz"] = val(s.advanced.base_clock_hz - s.advanced.base_clock_hz % 1000);
     x["log"] = val(s.advanced.log);
     x["show_fps"] = val(s.advanced.show_fps);

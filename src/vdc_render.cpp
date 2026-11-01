@@ -1,8 +1,10 @@
 // VDC rendering extracted from the original rxpce implementation.
 // Portable PC-Engine Emulator, 1998 BERO; modified 1998 hmmx.
 #include "vdc_render.h"
+#include "palette_line.h"
 #include "machine.h"
 #include "vdc_pixels.h"
+#include "vdc_planes.h"
 #include "vdc_registers.h"
 #include <algorithm>
 #include <stdexcept>
@@ -21,8 +23,15 @@ Sprite ReadSprite(const Machine& machine, unsigned index) {
 std::uint16_t ReadWord(const std::uint8_t* bytes) {
     return static_cast<std::uint16_t>(bytes[0] | (std::uint16_t(bytes[1]) << 8));
 }
-void CheckFrame(Machine& machine, FrameSurface frame) {
-    if (!frame.pixels || frame.count < frame_width * frame_height || !machine.graphics.vram() ||
+template <class T> struct DrawSurface {
+    T* pixels;
+    std::size_t count;
+    int first_row = 0, rows = frame_height;
+};
+template <class T> void CheckFrame(Machine& machine, DrawSurface<T> frame) {
+    if (!frame.pixels || frame.first_row < 0 || frame.rows <= 0 ||
+        frame.first_row > int(frame_height) - frame.rows ||
+        frame.count < frame_width * unsigned(frame.rows) || !machine.graphics.vram() ||
         machine.io.screen_w < 0 || machine.io.screen_w > 512 || machine.io.screen_w % 8)
         throw std::invalid_argument("Invalid video frame or geometry");
 }
@@ -41,7 +50,8 @@ std::uint32_t ReverseBits(std::uint32_t bits) {
     return (bits << 16) | (bits >> 16);
 }
 // Bit zero is the leftmost screen pixel, independent of palette and drawing caches.
-std::uint32_t SpriteRowMask(const Machine& machine, const Sprite& sprite, int row) {
+std::uint32_t SpriteRowMask(const Machine& machine, const Sprite& sprite, int row,
+                            std::uint16_t memory) {
     const int width = SpriteWidth(sprite), height = SpriteHeight(sprite);
     int y = row - ((sprite.y & 1023) - 64);
     if (y < 0 || y >= height)
@@ -51,10 +61,11 @@ std::uint32_t SpriteRowMask(const Machine& machine, const Sprite& sprite, int ro
     const unsigned alignment = (height / 16 - 1) * 2 + (width / 16 - 1);
     const unsigned base = ((sprite.no & 2047) >> 1) & ~alignment;
     std::uint32_t mask = 0;
+    const auto planes = rxpce_video::SpritePlanes(memory, sprite.no);
     for (int cell = 0; cell < width / 16; ++cell) {
         const auto* tile = machine.graphics.vram() + (base + (y / 16) * 2 + cell) * 128;
         std::uint16_t opaque = 0;
-        for (unsigned plane = 0; plane < 4; ++plane)
+        for (unsigned plane = planes.first; plane < planes.first + planes.count; ++plane)
             opaque |= ReadWord(tile + plane * 32 + (y % 16) * 2);
         mask |= (ReverseBits(opaque) >> 16) << (cell * 16);
     }
@@ -66,6 +77,11 @@ rxpce_video::SpriteLinePlan EvaluateMachineSprites(const Machine& machine, int r
     return rxpce_video::EvaluateSpriteLine(
         machine.video.sprites, row, rxpce_video::SpriteLimitsFromRegisters(a.hsr, a.hdr, a.memory));
 }
+rxpce_video::SpriteLinePlan EvaluateMachineDrawingSprites(const Machine& machine, int row) {
+    if (machine.hardware_sprite_limit)
+        return EvaluateMachineSprites(machine, row);
+    return rxpce_video::EvaluateSpriteLine(machine.video.sprites, row, {}, false);
+}
 bool SpritesCollide(const Machine& machine, const rxpce_video::SpriteLinePlan& plan,
                     const SpriteDisplay& display) {
     const int row = display.row;
@@ -73,7 +89,7 @@ bool SpritesCollide(const Machine& machine, const rxpce_video::SpriteLinePlan& p
         return false;
     const auto first = ReadSprite(machine, 0);
     const int x0 = (first.x & 1023) - 32, w0 = SpriteWidth(first);
-    const auto full0 = SpriteRowMask(machine, first, row);
+    const auto full0 = SpriteRowMask(machine, first, row, display.memory);
     std::uint32_t mask0 = 0;
     for (unsigned i = 0; i < plan.count; ++i)
         if (plan.cells[i].satb_index == 0)
@@ -91,8 +107,8 @@ bool SpritesCollide(const Machine& machine, const rxpce_video::SpriteLinePlan& p
         if (left >= end)
             continue;
         const auto overlap = static_cast<std::uint32_t>((std::uint64_t{1} << (end - left)) - 1);
-        if (((mask0 >> (left - x0)) & (SpriteRowMask(machine, spr, row) >> (left - x)) & overlap) !=
-            0)
+        if (((mask0 >> (left - x0)) &
+             (SpriteRowMask(machine, spr, row, display.memory) >> (left - x)) & overlap) != 0)
             return true;
     }
     return false;
@@ -107,28 +123,29 @@ static void DecodeSpriteTile(Machine& machine, int no) {
                                  machine.graphics.sprites() + no * 32);
 }
 #define PAL(c) R[c]
-#define SPal (machine.video.palette.data() + 256)
 #define FC_W machine.io.screen_w
 #define FC_H 256
 
-void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2,
-                      const BackgroundRegisters& registers) {
+template <class T>
+void RenderBackgroundImpl(Machine& machine, DrawSurface<T> frame, int Y1, int Y2,
+                          const BackgroundRegisters& registers, const T* palette) {
     CheckFrame(machine, frame);
-    if (Y1 - machine.video.row_bias < 0 || Y1 - machine.video.row_bias > 256 ||
-        Y2 - machine.video.row_bias >= 256)
+    if (Y1 - machine.video.row_bias < frame.first_row || Y1 - machine.video.row_bias > 256 ||
+        Y2 - machine.video.row_bias >= frame.first_row + frame.rows)
         throw std::invalid_argument("Invalid background rows");
     if (Y2 < Y1 || machine.io.screen_w == 0)
         return;
     int X1, XW, Line;
     int x, y, h, offset, Shift;
 
-    rxpce_video::Pixel* PP;
+    T* PP;
 
     Y2++;
     PP = frame.pixels + render_stride * (render_rows - FC_H) / 2 + (render_stride - FC_W) / 2 +
-         render_stride * (Y1 - machine.video.row_bias);
+         render_stride * (Y1 - machine.video.row_bias - frame.first_row);
 
     if ((registers.control & 0x80) && machine.video.background_enabled) {
+        const auto planes = rxpce_video::BackgroundPlanes(registers.memory);
 
         y = Y1 + registers.y_offset;
         offset = y & 7;
@@ -145,13 +162,14 @@ void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2,
             x = registers.x_scroll / 8;
             y &= machine.io.bg_h - 1;
             for (X1 = 0; X1 < XW; X1++, x++, PP += 8) {
-                rxpce_video::Pixel *R, *P;
+                const T* R;
+                T* P;
                 byte* C;
                 std::uint32_t* C2;
                 int no, i;
                 x &= machine.io.bg_w - 1;
                 no = ReadWord(machine.graphics.vram() + 2 * (x + y * machine.io.bg_w));
-                R = &machine.video.palette.data()[(no >> 12) * 16];
+                R = &palette[(no >> 12) * 16];
                 no &= 0xFFF;
                 if (machine.graphics.background_dirty()[no]) {
                     machine.graphics.background_dirty()[no] = 0;
@@ -167,10 +185,12 @@ void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2,
                     std::uint8_t J;
 
                     J = (C[0] | C[1] | C[16] | C[17]);
+                    if (planes.count == 2)
+                        J = planes.first ? (C[16] | C[17]) : (C[0] | C[1]);
                     if (!J)
                         continue;
 
-                    L = C2[0];
+                    L = planes.packed(C2[0]);
                     if (J & 0x80)
                         P[0] = PAL((L >> 4) & 15);
                     if (J & 0x40)
@@ -206,8 +226,9 @@ void RenderBackground(Machine& machine, FrameSurface frame, int Y1, int Y2,
 #define SPBG 0x80
 #define CGX 0x100
 
-static void PutSprite(rxpce_video::Pixel* output, const byte* source, const std::uint32_t* cache,
-                      rxpce_video::Pixel* R, int h, int inc) {
+template <class T>
+static void PutSprite(T* output, const byte* source, const std::uint32_t* cache, const T* R, int h,
+                      int inc) {
     int i, J;
     std::uint32_t L;
     for (i = 0; i < h; ++i) {
@@ -254,8 +275,9 @@ static void PutSprite(rxpce_video::Pixel* output, const byte* source, const std:
     }
 }
 
-static void PutSpriteHflip(rxpce_video::Pixel* output, const byte* source,
-                           const std::uint32_t* cache, rxpce_video::Pixel* R, int h, int inc) {
+template <class T>
+static void PutSpriteHflip(T* output, const byte* source, const std::uint32_t* cache, const T* R,
+                           int h, int inc) {
     int i, J;
     std::uint32_t L;
     for (i = 0; i < h; ++i) {
@@ -302,8 +324,9 @@ static void PutSpriteHflip(rxpce_video::Pixel* output, const byte* source,
     }
 }
 
-static void PutSpriteM(rxpce_video::Pixel* output, const byte* source, const std::uint32_t* cache,
-                       rxpce_video::Pixel* R, int h, int inc, byte* mask, byte pr) {
+template <class T>
+static void PutSpriteM(T* output, const byte* source, const std::uint32_t* cache, const T* R, int h,
+                       int inc, byte* mask, byte pr) {
     int i, J;
     std::uint32_t L;
     for (i = 0; i < h; ++i) {
@@ -351,9 +374,9 @@ static void PutSpriteM(rxpce_video::Pixel* output, const byte* source, const std
     }
 }
 
-static void PutSpriteHflipM(rxpce_video::Pixel* output, const byte* source,
-                            const std::uint32_t* cache, rxpce_video::Pixel* R, int h, int inc,
-                            byte* mask, byte pr) {
+template <class T>
+static void PutSpriteHflipM(T* output, const byte* source, const std::uint32_t* cache, const T* R,
+                            int h, int inc, byte* mask, byte pr) {
     int i, J;
     std::uint32_t L;
     for (i = 0; i < h; ++i) {
@@ -401,9 +424,9 @@ static void PutSpriteHflipM(rxpce_video::Pixel* output, const byte* source,
     }
 }
 
-static void PutSpriteMakeMask(rxpce_video::Pixel* output, const byte* source,
-                              const std::uint32_t* cache, rxpce_video::Pixel* R, int h, int inc,
-                              byte* mask, byte pr) {
+template <class T>
+static void PutSpriteMakeMask(T* output, const byte* source, const std::uint32_t* cache, const T* R,
+                              int h, int inc, byte* mask, byte pr) {
     int i, J;
     std::uint32_t L;
     for (i = 0; i < h; ++i) {
@@ -483,9 +506,9 @@ static void PutSpriteMakeMask(rxpce_video::Pixel* output, const byte* source,
     }
 }
 
-static void PutSpriteHflipMakeMask(rxpce_video::Pixel* output, const byte* source,
-                                   const std::uint32_t* cache, rxpce_video::Pixel* R, int h,
-                                   int inc, byte* mask, byte pr) {
+template <class T>
+static void PutSpriteHflipMakeMask(T* output, const byte* source, const std::uint32_t* cache,
+                                   const T* R, int h, int inc, byte* mask, byte pr) {
     int i, J;
     std::uint32_t L;
     for (i = 0; i < h; ++i) {
@@ -565,10 +588,13 @@ static void PutSpriteHflipMakeMask(rxpce_video::Pixel* output, const byte* sourc
     }
 }
 
-void RenderSpriteLine(Machine& machine, FrameSurface frame, int row, unsigned bg,
-                      const rxpce_video::SpriteLinePlan& plan) {
+template <class T>
+void RenderSpriteLineImpl(Machine& machine, DrawSurface<T> frame, int row, unsigned bg,
+                          const rxpce_video::SpriteLinePlan& plan, std::uint16_t memory,
+                          const T* palette) {
     CheckFrame(machine, frame);
-    if (row - machine.video.row_bias < 0 || row - machine.video.row_bias >= 256 || bg > 1)
+    if (row - machine.video.row_bias < frame.first_row ||
+        row - machine.video.row_bias >= frame.first_row + frame.rows || bg > 1)
         throw std::invalid_argument("Invalid sprite row");
     for (unsigned i = plan.count; i > 0; --i) {
         const auto cell = plan.cells[i - 1];
@@ -589,10 +615,24 @@ void RenderSpriteLine(Machine& machine, FrameSurface frame, int row, unsigned bg
         }
         auto* C = machine.graphics.vram() + tile * 128 + (cell.row % 16) * 2;
         auto* C2 = machine.graphics.sprites() + tile * 32 + (cell.row % 16) * 2;
-        auto* R = &SPal[(attr & 15) * 16];
+        const auto planes = rxpce_video::SpritePlanes(memory, spr.no);
+        // Keep the shared cache in four-plane form. Only SM1 uses this temporary row;
+        // both opacity and packed colors presented to the legacy blitters are selected.
+        std::array<byte, 128> selected_source;
+        std::array<std::uint32_t, 2> selected_cache;
+        if (planes.count == 2) {
+            selected_source.fill(0);
+            for (unsigned p = 0; p < 2; ++p)
+                for (unsigned b = 0; b < 2; ++b)
+                    selected_source[p * 32 + b] = C[(planes.first + p) * 32 + b];
+            selected_cache = {planes.packed(C2[0]), planes.packed(C2[1])};
+            C = selected_source.data();
+            C2 = selected_cache.data();
+        }
+        auto* R = &palette[256 + (attr & 15) * 16];
         const auto pos = (row - machine.video.row_bias) * render_stride +
                          (render_stride - machine.io.screen_w) / 2 + x;
-        auto* P = frame.pixels + pos;
+        auto* P = frame.pixels + pos - frame.first_row * render_stride;
         auto* M = machine.video.priority.data() + pos;
         const auto priority = static_cast<byte>(63 - cell.satb_index);
         if (bg == 0) {
@@ -614,17 +654,85 @@ void RenderSpriteLine(Machine& machine, FrameSurface frame, int row, unsigned bg
         }
     }
 }
-void ClearVideoRows(Machine& machine, FrameSurface frame, int first, int last) {
+template <class T>
+void ClearVideoRowsImpl(Machine& machine, DrawSurface<T> frame, int first, int last,
+                        const T* palette) {
     first -= machine.video.row_bias;
     last -= machine.video.row_bias;
-    if (!frame.pixels || frame.count < frame_width * frame_height || first < 0 || first > 256 ||
-        last >= 256)
+    if (!frame.pixels || frame.count < frame_width * unsigned(frame.rows) ||
+        first < frame.first_row || first > 256 || last >= frame.first_row + frame.rows)
         throw std::invalid_argument("Invalid video clear range");
     if (last < first)
         return;
-    std::fill_n(frame.pixels + first * frame_width, (last - first + 1) * frame_width,
-                machine.video.palette[0]);
+    std::fill_n(frame.pixels + (first - frame.first_row) * frame_width,
+                (last - first + 1) * frame_width, palette[0]);
     std::fill_n(machine.video.priority.data() + first * frame_width,
                 (last - first + 1) * frame_width, 0);
+}
+
+void RenderBackground(Machine& m, FrameSurface f, int first, int last,
+                      const BackgroundRegisters& r) {
+    RenderBackgroundImpl(m, DrawSurface<rxpce_video::Pixel>{f.pixels, f.count}, first, last, r,
+                         m.video.palette.data());
+}
+void RenderSpriteLine(Machine& m, FrameSurface f, int row, unsigned bg,
+                      const rxpce_video::SpriteLinePlan& p, std::uint16_t memory) {
+    RenderSpriteLineImpl(m, DrawSurface<rxpce_video::Pixel>{f.pixels, f.count}, row, bg, p, memory,
+                         m.video.palette.data());
+}
+void ClearVideoRows(Machine& m, FrameSurface f, int first, int last) {
+    ClearVideoRowsImpl(m, DrawSurface<rxpce_video::Pixel>{f.pixels, f.count}, first, last,
+                       m.video.palette.data());
+}
+namespace {
+constexpr auto entry_palette() {
+    std::array<PaletteEntry, 512> p{};
+    for (unsigned i = 0; i < 512; ++i)
+        p[i] = PaletteEntry(i < 256 && !(i & 15) ? 0 : i);
+    return p;
+}
+constexpr auto entries = entry_palette();
+} // namespace
+void ComposePaletteLine(Machine& m, PaletteLine& line, int row) {
+    static_assert(palette_line_pixels == frame_width, "palette line geometry");
+    line.active = false;
+    const int y = row - m.video.row_bias;
+    if (y < 0 || y >= int(frame_height))
+        throw std::invalid_argument("Invalid palette row");
+    DrawSurface<PaletteEntry> surface{line.entries.data(), line.entries.size(), y, 1};
+    const auto& s = m.vdc.scan.state();
+    const auto control = s.active.control;
+    const auto plan =
+        (control & 0x40) ? EvaluateMachineDrawingSprites(m, row) : rxpce_video::SpriteLinePlan{};
+    ClearVideoRowsImpl(m, surface, row, row, entries.data());
+    m.video.uses_sprite_priority = 0;
+    if ((control & 0x40) && m.video.sprites_enabled)
+        RenderSpriteLineImpl(m, surface, row, 0, plan, s.active.memory, entries.data());
+    RenderBackgroundImpl(m, surface, row, row,
+                         {control, s.active.x_scroll, int(s.y_counter) - row, s.active.memory},
+                         entries.data());
+    if ((control & 0x40) && m.video.sprites_enabled)
+        RenderSpriteLineImpl(m, surface, row, 1, plan, s.active.memory, entries.data());
+    line.output_row = y;
+    line.width = static_cast<unsigned>(m.io.screen_w);
+    line.start_master = m.vce_clock.state().master_time;
+    constexpr unsigned dividers[] = {4, 3, 2, 2};
+    line.divider = dividers[m.vce_clock.state().control & 3];
+    line.monochrome = (m.vce_clock.state().control & 128) != 0;
+    line.committed = 0;
+    line.used_valid = false;
+    line.active = true;
+}
+void ResolvePaletteLine(PaletteLine& line, FrameSurface frame,
+                        const std::array<rxpce_video::Pixel, 512>& palette, unsigned end) {
+    if (!line.active || line.output_row < 0 || line.output_row >= int(frame_height) ||
+        end > frame_width || end < line.committed || !frame.pixels ||
+        frame.count < frame_width * frame_height)
+        throw std::invalid_argument("Invalid palette prefix");
+    auto* out = frame.pixels + line.output_row * frame_width;
+    const auto attribute = line.monochrome ? rxpce_video::monochrome_bit : 0;
+    for (unsigned x = line.committed; x < end; ++x)
+        out[x] = static_cast<rxpce_video::Pixel>(palette[line.entries[x].index()] | attribute);
+    line.committed = end;
 }
 } // namespace rxpce_machine

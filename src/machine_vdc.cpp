@@ -15,6 +15,9 @@ std::uint16_t read_word(Machine& m, std::uint16_t address) {
     return static_cast<std::uint16_t>(p[0] | (unsigned(p[1]) << 8));
 }
 void write_word(Machine& m, std::uint16_t address, std::uint16_t value) {
+    // MA15 drives the active-low SRAM chip select; counters still run at 16 bits.
+    if (address >= 0x8000)
+        return;
     auto* p = m.graphics.vram() + unsigned(address) * 2;
     p[0] = static_cast<std::uint8_t>(value);
     p[1] = static_cast<std::uint8_t>(value >> 8);
@@ -83,7 +86,6 @@ void service_cpu(Machine& m) {
         q.read_buffer = read_word(m, q.address);
     else {
         write_word(m, q.address, q.value);
-        m.io.vdc[MAWR].value = static_cast<std::uint16_t>(q.address + q.increment);
     }
     q.kind = CpuVramKind::none;
     q.elapsed = 0;
@@ -111,6 +113,7 @@ void scan_event(void* context, const ScanEvent& e) {
     };
     switch (e.kind) {
     case ScanEventKind::hsync_start:
+        FinishMachinePaletteLine(m, m.video_surface);
         if (m.vdc_mode == VdcMode::fast && m.vdc.fast_satb_lines && --m.vdc.fast_satb_lines == 0)
             callbacks(m).complete(&m, DmaChannel::satb, 0);
         break;
@@ -121,10 +124,14 @@ void scan_event(void* context, const ScanEvent& e) {
         m.video.row_bias =
             (std::max)(0, ((std::min)(m.io.screen_h, m.frame_lines) - int(frame_height)) / 2);
         m.video.render_frame = m.video.next_render;
+        if (m.video.resume == VideoResume::waiting && m.video.render_frame)
+            m.video.resume = VideoResume::drawing;
         if (m.vdc_mode == VdcMode::accurate)
             m.vdc.dma.display_start(s.burst);
         break;
     case ScanEventKind::vblank_start:
+        if (m.video.resume == VideoResume::drawing)
+            m.video.resume = VideoResume::ready;
         m.io.bg_w = 32 << ((s.active.memory >> 4) & 3);
         if (m.io.bg_w > 128)
             m.io.bg_w = 128;
@@ -139,6 +146,7 @@ void scan_event(void* context, const ScanEvent& e) {
         m.vdc.sprite_fetch_remaining = 0;
         break;
     case ScanEventKind::h_front_start: {
+        FinishMachinePaletteLine(m, m.video_surface);
         constexpr unsigned costs[] = {4, 4, 8, 16};
         if (m.vdc_mode == VdcMode::accurate && (s.active.control & 0x40))
             m.vdc.sprite_fetch_remaining = static_cast<std::uint16_t>(
@@ -150,6 +158,7 @@ void scan_event(void* context, const ScanEvent& e) {
             raise(VDC_RasHit);
         break;
     case ScanEventKind::vblank_irq:
+        FinishMachinePaletteLine(m, m.video_surface);
         if (m.io.vdc[CR].value & 8)
             raise(VDC_InVBlank);
         break;
@@ -164,8 +173,9 @@ void scan_event(void* context, const ScanEvent& e) {
         if ((m.io.vdc[CR].value & 2) && plan.overflow)
             raise(VDC_Over);
         if ((m.io.vdc[CR].value & 1) &&
-            SpritesCollide(m, plan,
-                           {e.row, 0, int(s.active.vdw), int((s.active.hdr & 127) + 1) * 8}))
+            SpritesCollide(
+                m, plan,
+                {e.row, 0, int(s.active.vdw), int((s.active.hdr & 127) + 1) * 8, s.active.memory}))
             raise(VDC_SpHit);
         RenderMachineScanline(m, m.video_surface, e.row);
         break;
@@ -193,6 +203,7 @@ void WriteMachineVdcRegister(Machine& m, unsigned reg) {
         m.vdc.scan.write(static_cast<ScanRegister>(reg - CR), m.io.vdc[reg].value);
 }
 void ResetMachineVdc(Machine& m) {
+    m.video.line.active = false;
     m.video_clock = CpuVideoClock(m.cpu_clock_hz);
     m.vce_clock = VceClock{};
     m.frame_lines = m.vce_clock.state().frame_lines;
@@ -299,8 +310,10 @@ void QueueVramWrite(Machine& m, std::uint16_t address, std::uint16_t value) {
     m.vdc.cpu.kind = rxpce_video::CpuVramKind::write;
     m.vdc.cpu.address = address;
     m.vdc.cpu.value = value;
-    m.vdc.cpu.increment = m.io.vdc_inc;
     m.vdc.cpu.elapsed = 0;
+    // Capture the destination and advance the CPU-visible pointer on acceptance.
+    // Completion must not overwrite a newer MAWR programmed while this write waits.
+    m.io.vdc[MAWR].value = static_cast<std::uint16_t>(address + m.io.vdc_inc);
 }
 unsigned MachineVdcReady(Machine& m, std::uint32_t address, bool write) {
     if ((address >> 13) != 255 || (address & 0x1c00) != 0 ||

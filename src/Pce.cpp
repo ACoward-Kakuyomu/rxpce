@@ -512,6 +512,9 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file) {
     try {
         auto& machine = CurrentMachine();
         machine.vdc_mode = rxpce_host::runtime.vdc_emulation;
+        machine.hardware_sprite_limit = rxpce_host::runtime.hardware_sprite_limit;
+        LogDumpDetail("Sprite drawing limit=%s\n",
+                      machine.hardware_sprite_limit ? "hardware" : "unrestricted");
         LogDumpDetail("VDC emulation=%s\n",
                       machine.vdc_mode == rxpce_video::VdcMode::fast ? "fast" : "accurate");
         machine.cpu_clock_hz = static_cast<unsigned>(rxpce_host::runtime.base_clock_hz);

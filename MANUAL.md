@@ -1,4 +1,4 @@
-# rxpce 1.0.0 操作説明書 / User Manual
+# rxpce 1.3.0 操作説明書 / User Manual
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 
@@ -164,11 +164,14 @@ Monoは左右の音声の平均です。音声のレート変換による遅延�
 | --- | --- |
 | Base clock (Hz) | 初期値7,170,000。通常は変更しません。範囲1,000,000～85,920,000、1000 Hz単位に切捨て |
 | VDC emulation | `Accurate`（既定）は段階DMA・CPU競合待ちを再現。`Fast`は一括転送と簡略タイミングで速度を優先。次回エミュレーション開始時に反映 |
+| Enforce hardware sprite limit | 既定はチェックあり。外すとSATB内の最大64スプライトを描画対象とし、取得枠による欠落を減らします。IRQ・衝突・DMA待機は変わりません。次回エミュレーション開始時に反映。ステートは両設定で共用します |
 | Enable diagnostic log | 詳細ログを有効化。初期値は無効 |
 | Show FPS | FPS表示。初期値は無効。実行中はF7でも変更可能 |
 | XInput support／DirectInput support | パッド入力方式の有効／無効。初期値はXInputのみ有効 |
 
 VDC emulationは処理負荷とタイミングモデルの選択です。FastでもAutomatic frame skipが有効なら通常速度（約60 Hz）を維持します。ゲームの表示や動作に差がある場合はAccurateを選び、ゲームを開き直してください。
+
+Accurateは走査線の途中のパレット変更を追加遅延0の近似で反映します。Fastは行頭の色をその行全体へ使います。ステート復帰時は不完全な表示フレームを破棄し、次の完全なフレームから表示を再開します。表示区間がフレーム境界をまたぐ場合は、その区間が完成するまで提示を待ちます。
 
 通常速度の待機は、映像時計21,477,270 Hz・1行1365クロックで実際に完了したフレーム時刻に従います。VCEの指定により262行（約60.054 Hz）または263行（約59.826 Hz）となり、途中で行数が変わる場合も時刻の端数を累積します。映像時計はBase clockから独立しています。
 
@@ -200,11 +203,11 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-**正式版1.1.0以前のステートは1.2.0では読み込めません。** 更新後はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+**正式版1.2.0以前のステートは1.3.0では読み込めません。** 更新後はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
-CPUの命令取得・アクセス時刻の改善でも、Accurate/FastそれぞれのHuCard/CD形式GUIDを更新しています。この変更前のステートは読み込めないため、更新後はゲームを新規起動してステートを作成してください。
+特殊描画モード・VRAM書込み規則・行内パレット反映と復帰表示の改善でも、Accurate/FastそれぞれのHuCard/CD形式GUIDを更新しています。この変更前のステートは読み込めないため、更新後はゲームを新規起動してステートを作成してください。
 
 更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.fst0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
 
@@ -392,11 +395,14 @@ Other relative folder paths use the process working directory. Use a writable ab
 | --- | --- |
 | Base clock (Hz) | Default 7,170,000; normally leave unchanged. Range 1,000,000–85,920,000, rounded down to 1000 Hz units |
 | VDC emulation | `Accurate` (default) uses progressive DMA and CPU contention waits. `Fast` prioritizes speed with bulk transfers and simplified timing. Applied on the next emulation start |
+| Enforce hardware sprite limit | Enabled by default. Disable to draw all eligible sprites in the 64-entry SATB, bypassing drawing search/fetch limits. IRQs, collision detection and DMA waits stay unchanged. Applied on the next emulation start; save states are shared between both settings |
 | Enable diagnostic log | Enable detailed logging; disabled by default |
 | Show FPS | FPS display; disabled by default. F7 changes it during play |
 | XInput support / DirectInput support | Enable input backends; only XInput is enabled by default |
 
 VDC emulation selects processing cost and timing behavior. Fast still runs at the normal speed (approximately 60 Hz) when Automatic frame skip is enabled. If a game shows display or behavior differences, select Accurate and reopen the game.
+
+Accurate applies palette changes within a scanline using a zero additional delay approximation. Fast uses the colors at the start of the line for the entire line. Loading a state discards the unfinished display frame; display resumes with the next complete frame. If the VDC display interval crosses a frame boundary, presentation waits until that interval is complete. The palette-timing update changes all four state format GUIDs; create new states after reopening the game. In-game saves remain usable.
 
 Normal-speed pacing follows completed frame timestamps at a video reference of 21,477,270 Hz and 1365 clocks per line. VCE selects 262 lines (about 60.054 Hz) or 263 lines (about 59.826 Hz). Fractional time accumulates across changes in frame length. The video clock is independent of Base clock.
 
@@ -428,11 +434,11 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-**Save states from official releases 1.1.0 and earlier cannot be loaded in 1.2.0.** Start games normally and create new states after updating. See the [release notes](RELEASE_NOTES.md#english) for changes.
+**Save states from official releases 1.2.0 and earlier cannot be loaded in 1.3.0.** Start games normally and create new states after updating. See the [release notes](RELEASE_NOTES.md#english) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 
-CPU instruction-fetch and access-timing improvements also update the HuCard/CD format GUIDs for both Accurate and Fast. States made before this change cannot be loaded; start the game normally and create new states after updating.
+Special rendering modes, VRAM write rules, palette timing and restored presentation changes also update the HuCard/CD format GUIDs for both Accurate and Fast. States made before this change cannot be loaded; start the game normally and create new states after updating.
 
 Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
 

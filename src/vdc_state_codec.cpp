@@ -12,9 +12,7 @@ bool valid_vdc(const VdcSnapshot& s, std::string& error) {
         if (s.sprite_fetch_cells > 16 || s.sprite_fetch_remaining > 256 || s.fast_satb_lines > 4)
             throw std::invalid_argument("Invalid sprite fetch reservation");
         if (static_cast<unsigned>(s.cpu.kind) > 2 || s.cpu.elapsed > 3 ||
-            (s.cpu.kind == rxpce_video::CpuVramKind::none && s.cpu.elapsed) ||
-            (s.cpu.increment != 1 && s.cpu.increment != 32 && s.cpu.increment != 64 &&
-             s.cpu.increment != 128))
+            (s.cpu.kind == rxpce_video::CpuVramKind::none && s.cpu.elapsed))
             throw std::invalid_argument("Invalid pending CPU VRAM access");
         error.clear();
         return true;
@@ -50,7 +48,6 @@ std::vector<char> encode_vdc(const VdcSnapshot& s) {
     w.number(s.cpu.value, 2);
     w.number(s.cpu.read_buffer, 2);
     w.number(s.cpu.elapsed, 1);
-    w.number(s.cpu.increment, 2);
     w.number(s.sprite_fetch_cells, 1);
     w.number(s.sprite_fetch_remaining, 2);
     w.number(s.fast_satb_lines, 1);
@@ -90,7 +87,6 @@ bool decode_vdc(const char* data, std::size_t size, VdcSnapshot& output, std::st
         next.cpu.value = static_cast<std::uint16_t>(r.number(2));
         next.cpu.read_buffer = static_cast<std::uint16_t>(r.number(2));
         next.cpu.elapsed = static_cast<std::uint8_t>(r.number(1));
-        next.cpu.increment = static_cast<std::uint16_t>(r.number(2));
         next.sprite_fetch_cells = static_cast<std::uint8_t>(r.number(1));
         next.sprite_fetch_remaining = static_cast<std::uint16_t>(r.number(2));
         next.fast_satb_lines = static_cast<std::uint8_t>(r.number(1));

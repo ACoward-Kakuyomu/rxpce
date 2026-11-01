@@ -22,6 +22,7 @@ std::uint8_t ReadMachineIo(Machine&, const DeviceHost&, std::uint16_t address);
 void TickMachineLine(Machine&, const DeviceHost&, FrameSurface, std::uint64_t time);
 void AttachMachineVideo(Machine&, const DeviceHost&, FrameSurface);
 void RenderMachineScanline(Machine&, FrameSurface, int row);
+void FinishMachinePaletteLine(Machine&, FrameSurface);
 void PresentMachineFrame(Machine&, const DeviceHost&, FrameSurface, std::uint64_t master_time);
 void TickMachineTimer(Machine&);
 void ResetVideoAfterLoad(Machine&, FrameSurface);

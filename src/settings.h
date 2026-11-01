@@ -39,6 +39,7 @@ struct Settings {
     } cd;
     struct Advanced {
         rxpce_video::VdcMode vdc_emulation = rxpce_video::VdcMode::accurate;
+        bool hardware_sprite_limit = true;
         int base_clock_hz = 7170000;
         bool log = false, show_fps = false;
     } advanced;

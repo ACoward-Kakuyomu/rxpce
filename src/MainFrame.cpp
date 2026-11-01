@@ -475,6 +475,7 @@ void CMainFrame::ApplySettings() {
     rxpce_host::runtime.rom_directory = rxpce_paths::from_utf8(m_config.folders.rom);
     rxpce_host::runtime.state_directory = rxpce_paths::from_utf8(m_config.folders.state);
     rxpce_host::runtime.vdc_emulation = m_config.advanced.vdc_emulation;
+    rxpce_host::runtime.hardware_sprite_limit = m_config.advanced.hardware_sprite_limit;
     rxpce_host::runtime.base_clock_hz = m_config.advanced.base_clock_hz;
     rxpce_host::runtime.show_fps = m_config.advanced.show_fps;
     SetLogDumpDetail(m_config.advanced.log);
