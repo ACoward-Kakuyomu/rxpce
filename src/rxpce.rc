@@ -95,6 +95,19 @@ BEGIN
         MENUITEM "&Fullscreen\tAlt+Enter", IDC_FULLSCREEN
         MENUITEM SEPARATOR
         MENUITEM "&Settings...", IDC_SETTINGS
+        POPUP "&Input Profiles"
+        BEGIN
+            MENUITEM "1  Profile 1\tAlt+1", IDC_INPUT_PROFILE_FIRST, CHECKED
+            MENUITEM "2  Profile 2\tAlt+2", IDC_INPUT_PROFILE_FIRST + 1
+            MENUITEM "3  Profile 3\tAlt+3", IDC_INPUT_PROFILE_FIRST + 2
+            MENUITEM "4  Profile 4\tAlt+4", IDC_INPUT_PROFILE_FIRST + 3
+            MENUITEM "5  Profile 5\tAlt+5", IDC_INPUT_PROFILE_FIRST + 4
+            MENUITEM "6  Profile 6\tAlt+6", IDC_INPUT_PROFILE_FIRST + 5
+            MENUITEM "7  Profile 7\tAlt+7", IDC_INPUT_PROFILE_FIRST + 6
+            MENUITEM "8  Profile 8\tAlt+8", IDC_INPUT_PROFILE_FIRST + 7
+            MENUITEM "9  Profile 9\tAlt+9", IDC_INPUT_PROFILE_FIRST + 8
+            MENUITEM "10  Profile 10\tAlt+0", IDC_INPUT_PROFILE_LAST
+        END
         MENUITEM SEPARATOR
         MENUITEM "&About rxpce...", IDC_ABOUT
     END

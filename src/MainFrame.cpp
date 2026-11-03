@@ -47,6 +47,7 @@ LRESULT CMainFrame::OnCreate(UINT, WPARAM, LPARAM, BOOL&) {
             return 0;
         }
         PrepareVideoWindow();
+        UpdateInputProfileLabels();
         PostMessage(WM_VIDEO_INITIALIZE);
     } catch (const std::exception& error) {
         ShowFailure(error.what(), "rxpce");
@@ -66,6 +67,9 @@ BOOL CMainFrame::OnIdle() {
     ::EnableMenuItem(m_menu, IDC_ZOOM1,
                      MF_BYCOMMAND | (bFullScreen.load() ? MF_GRAYED : MF_ENABLED));
     ::EnableMenuItem(m_menu, IDC_SETTINGS, MF_BYCOMMAND | MF_ENABLED);
+    const UINT profile_state = CanSelectInputProfile() ? MF_ENABLED : MF_GRAYED;
+    for (UINT id = IDC_INPUT_PROFILE_FIRST; id <= IDC_INPUT_PROFILE_LAST; ++id)
+        ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | profile_state);
     return FALSE;
 }
 LRESULT CMainFrame::OnInitMenu(UINT, WPARAM, LPARAM, BOOL&) {
@@ -404,6 +408,17 @@ LRESULT CMainFrame::OnVideoDpiChanged(UINT, WPARAM, LPARAM position, BOOL&) {
 BOOL CMainFrame::PreTranslateMessage(MSG* message) {
     if (rxpce_config::dialog_open || m_preparing || m_stopping)
         return FALSE;
+    const auto result = m_videoShortcuts.process(message->message, message->wParam, message->lParam,
+                                                 MachineCommands().ready(), bFullScreen.load());
+    if (result.command == rxpce_video::ShortcutCommand::input_profile) {
+        if (message->message == WM_KEYUP || message->message == WM_SYSKEYUP)
+            rxpce_input::keyboard_state().event(message->message,
+                                               static_cast<unsigned>(message->wParam),
+                                               message->lParam);
+        if (result.profile_slot)
+            SendMessage(WM_COMMAND, IDC_INPUT_PROFILE_FIRST + result.profile_slot - 1);
+        return TRUE;
+    }
     auto& keyboard = rxpce_input::keyboard_state();
     keyboard.event(message->message, static_cast<unsigned>(message->wParam), message->lParam);
     if (message->wParam == VK_SHIFT || message->wParam == VK_CONTROL ||
@@ -414,8 +429,6 @@ BOOL CMainFrame::PreTranslateMessage(MSG* message) {
         if (side)
             keyboard.event(message->message, side, message->lParam);
     }
-    const auto result = m_videoShortcuts.process(message->message, message->wParam, message->lParam,
-                                                 MachineCommands().ready(), bFullScreen.load());
     if (result.command == rxpce_video::ShortcutCommand::quit)
         OnExit();
     if (result.command == rxpce_video::ShortcutCommand::stop)
@@ -501,6 +514,65 @@ void CMainFrame::SaveProfile() {
     if (!rxpce_config::save(m_configPath, m_config, error))
         MessageBox(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
 }
+bool CMainFrame::CanSelectInputProfile() const {
+    return m_profileLoaded && !m_thread && !m_preparing && !m_stopping &&
+           !rxpce_config::dialog_open;
+}
+void CMainFrame::UpdateInputProfileLabels() {
+    static_assert(IDC_INPUT_PROFILE_LAST - IDC_INPUT_PROFILE_FIRST + 1 ==
+                  rxpce_config::Settings::input_profile_count);
+    for (int slot = 1; slot <= rxpce_config::Settings::input_profile_count; ++slot) {
+        const bool selected = slot == m_config.selected_profile;
+        const auto& inactive = m_config.inactive_profiles[slot - 1];
+        const auto name = rxpce_config::to_wide(
+            selected ? m_config.profile_name : (inactive ? inactive->name : std::string{}));
+        const auto number = std::to_wstring(slot);
+        auto label = number + L"  ";
+        if (name.empty())
+            label += L"Profile " + number;
+        for (wchar_t ch : name) {
+            if (ch == L'&')
+                label += L'&';
+            label += ch;
+        }
+        label += L"\tAlt+" + std::to_wstring(slot % 10);
+        const UINT id = IDC_INPUT_PROFILE_FIRST + slot - 1;
+        MENUITEMINFOW item{};
+        item.cbSize = sizeof(item);
+        item.fMask = MIIM_STRING;
+        item.dwTypeData = label.data();
+        ::SetMenuItemInfoW(m_menu, id, FALSE, &item);
+        ::CheckMenuItem(m_menu, id, MF_BYCOMMAND | (selected ? MF_CHECKED : MF_UNCHECKED));
+    }
+}
+LRESULT CMainFrame::OnInputProfile(WORD, WORD id, HWND, BOOL&) {
+    if (!CanSelectInputProfile())
+        return 0;
+    const int slot = id - IDC_INPUT_PROFILE_FIRST + 1;
+    if (slot == m_config.selected_profile)
+        return 0;
+
+    try {
+        CaptureRuntime();
+        auto candidate = m_config;
+        if (!rxpce_config::select_input_profile(candidate, slot))
+            return 0;
+        std::string error;
+        if (!m_configWritable)
+            error = "Open Settings and save a valid configuration before switching profiles.";
+        else if (rxpce_config::save(m_configPath, candidate, error)) {
+            m_config = std::move(candidate);
+            UpdateInputProfileLabels();
+            return 0;
+        }
+        rxpce_config::DialogInputScope input;
+        MessageBox(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
+    } catch (const std::exception& error) {
+        rxpce_config::DialogInputScope input;
+        MessageBox(error.what(), "Cannot switch input profile", MB_OK | MB_ICONERROR);
+    }
+    return 0;
+}
 void CMainFrame::OnSettings() {
     CaptureRuntime();
     const auto original = m_config;
@@ -526,6 +598,7 @@ void CMainFrame::OnSettings() {
     m_overrides.rom |= dialog.value.folders.rom != original.folders.rom;
     m_config = dialog.value;
     m_configWritable = true;
+    UpdateInputProfileLabels();
     SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
 }
 void CMainFrame::StopEmulation() {

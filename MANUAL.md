@@ -64,6 +64,7 @@ CUE版とCHD版のステートは共有できません。CHDで問題が出る�
 | Game → Exit | Alt+F4 | アプリケーション終了 |
 | View → Window Scale | F8 | ウィンドウ倍率を1→2→3→4倍と循環 |
 | View → Fullscreen | Alt+Enter | 全画面／ウィンドウ切替 |
+| View → Input Profiles | Alt+1〜Alt+0 | 停止中に入力プロファイル1〜10を選択 |
 | View → Settings... | — | 設定画面 |
 | View → About rxpce... | — | バージョン・著作者表示 |
 
@@ -155,7 +156,13 @@ Monoは左右の音声の平均です。音声のレート変換による遅延�
 
 #### Input
 
-人数、プレイヤーごとの2／6ボタン、デバイスとボタン割当を設定します。手順と初期配置は5節を参照してください。
+ゲームごとに使い分ける入力設定を10枠まで保存できます。ゲームを実行中ならEscで停止し、`View > Input Profiles` または `Alt+1`〜`Alt+0` で選びます。`Alt+0` はスロット10です。選択中の枠にはチェックが付き、次回起動時にも復元されます。未使用枠を初めて選ぶと、直前の枠の入力設定がコピーされます。
+
+`Settings > Input` の `Profile` で編集する枠を選び、`Name`（最大30文字）、プレイヤー数、入力機器、2／6ボタン、ボタンと連射の割り当てを編集します。ここでの枠移動ではゲームで使用する枠は変わりません。移動しても編集中の変更は保持され、OKでまとめて保存、Cancelで破棄します。空欄には `Profile 1` などの既定名を使います。保存した名前はメニューにすぐ反映され、割り当ては次回のエミュレーション開始時に適用されます。
+
+映像・音声、XInput／DirectInputサポート、保存先などは全枠で共通です。ゲーム内セーブとステートのファイル名はプロファイルを切り替えても同じです。ステートを復帰するには、保存時と同じプレイヤー数と2／6ボタン構成を選んでください。構成が異なる枠でもF5は同じファイルを上書きします。
+
+パッド設定の手順と初期配置は5節を参照してください。
 
 #### Folders
 
@@ -300,6 +307,7 @@ CUE and CHD states cannot be exchanged. If a CHD fails while the original CUE wo
 | Game → Exit | Alt+F4 | Quit |
 | View → Window Scale | F8 | Cycle 1×, 2×, 3× and 4× window scale |
 | View → Fullscreen | Alt+Enter | Toggle fullscreen/windowed mode |
+| View → Input Profiles | Alt+1 through Alt+0 | Select input profile 1–10 while stopped |
 | View → Settings... | — | Open settings |
 | View → About rxpce... | — | Show version and credits |
 
@@ -391,7 +399,13 @@ Mono averages the left and right signals. Audio rate conversion adds a delay sep
 
 #### Input
 
-Configure the player count, each player's 2/6-button mode, device and bindings. See section 5 for instructions and defaults.
+You can save up to ten input profiles for different games. Press Esc to stop a running game, then select a profile through `View > Input Profiles` or with `Alt+1` through `Alt+0`. `Alt+0` selects slot 10. The active slot is checked in the menu and restored on the next launch. Selecting an unused slot for the first time copies the previous slot's input settings.
+
+In `Settings > Input`, use `Profile` to choose a slot to edit. You can change its `Name` (up to 30 characters), player count, input devices, two- or six-button mode, and button and rapid-fire mappings. Choosing a slot here keeps the active profile selected for gameplay. Edits stay in the dialog as you move between slots. Click OK to save all edits or Cancel to discard them. A blank name displays the default, such as `Profile 1`. Saved names appear in the menu immediately, and mappings apply the next time emulation starts.
+
+Video, audio, XInput and DirectInput support, and save locations are shared across profiles. In-game saves and save state filenames stay the same when you switch profiles. To load a state, use the same player count and two- or six-button configuration as when it was saved. F5 overwrites the same file even when the current profile uses a different controller configuration.
+
+See section 5 for gamepad setup and default mappings.
 
 #### Folders
 

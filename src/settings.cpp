@@ -120,6 +120,80 @@ std::string narrow(const std::wstring& text, UINT codepage) {
     require(!substituted, "Path cannot be represented by the current code page");
     return out;
 }
+bool valid_slot(int slot) {
+    return slot >= 1 && slot <= Settings::input_profile_count;
+}
+void validate_profile_name(const std::string& name) {
+    require(name.size() <= 120, "Input profile name exceeds 30 characters");
+    const auto text = wide(name, CP_UTF8);
+    int length = 0;
+    for (wchar_t unit : text) {
+        require(unit >= 0x20 && unit != 0x7f, "Control character in input profile name");
+        if (unit < 0xdc00 || unit > 0xdfff)
+            ++length;
+    }
+    require(length <= 30, "Input profile name exceeds 30 characters");
+}
+void validate_mapping(const Settings::PlayerInput& mapping) {
+    require(mapping.count >= 1 && mapping.count <= 5, "Invalid controller count");
+    for (const auto& player : mapping.players) {
+        require(player.buttons == 2 || player.buttons == 6, "Invalid controller button mode");
+        for (int n : player.keyboard)
+            require(n > 0 && n <= 255, "Invalid keyboard mapping");
+        for (int n : player.pad)
+            require(n >= 0 && n < 32, "Invalid pad mapping");
+        for (int n : player.xinput)
+            require(n >= 0 && n < 12, "Invalid XInput mapping");
+        if (player.device != "keyboard" && rxpce_input::xinput_slot(player.device) < 0) {
+            require(player.device.size() == 38 && player.device.front() == '{' &&
+                        player.device.back() == '}',
+                    "Invalid input device GUID");
+            for (std::size_t n = 1; n < 37; ++n) {
+                const char c = player.device[n];
+                const bool hyphen = n == 9 || n == 14 || n == 19 || n == 24;
+                require(hyphen ? c == '-'
+                               : ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                                  (c >= 'A' && c <= 'F')),
+                        "Invalid input device GUID");
+            }
+        }
+    }
+}
+void read_mapping(const picojson::object& i, Settings::PlayerInput& mapping) {
+    read(i, "count", mapping.count);
+    const auto players = i.find("players");
+    if (players != i.end()) {
+        require(players->second.is<picojson::array>(), "Invalid players array");
+        const auto& array = players->second.get<picojson::array>();
+        require(array.size() == 5, "Expected five player profiles");
+        for (std::size_t n = 0; n < 5; ++n) {
+            const auto& p = object(array[n]);
+            auto& player = mapping.players[n];
+            read(p, "device", player.device);
+            read(p, "buttons", player.buttons);
+            read(p, "keyboard", player.keyboard);
+            read(p, "pad", player.pad);
+            read(p, "xinput", player.xinput);
+        }
+    }
+}
+picojson::value encode_profile(const std::string& name, const Settings::PlayerInput& mapping) {
+    picojson::object profile;
+    profile["name"] = val(name);
+    picojson::array players;
+    for (const auto& player : mapping.players) {
+        picojson::object p;
+        p["device"] = val(player.device);
+        p["buttons"] = val(player.buttons);
+        p["keyboard"] = val(player.keyboard);
+        p["pad"] = val(player.pad);
+        p["xinput"] = val(player.xinput);
+        players.push_back(picojson::value(p));
+    }
+    profile["count"] = val(mapping.count);
+    profile["players"] = picojson::value(players);
+    return picojson::value(profile);
+}
 } // namespace
 std::wstring to_wide(const std::string& s) {
     return wide(s, CP_UTF8);
@@ -145,6 +219,24 @@ void merge_runtime(Settings& p, const Settings& r, const RuntimeOverrides& o) {
     if (!o.rom)
         p.folders.rom = r.folders.rom;
 }
+bool select_input_profile(Settings& s, int slot) {
+    if (!valid_slot(slot) || !valid_slot(s.selected_profile))
+        return false;
+    if (slot == s.selected_profile)
+        return true;
+
+    auto& target = s.inactive_profiles[slot - 1];
+    s.inactive_profiles[s.selected_profile - 1] = Settings::InputProfile{s.profile_name, s.input};
+    if (target) {
+        static_cast<Settings::PlayerInput&>(s.input) = std::move(target->mapping);
+        s.profile_name = std::move(target->name);
+        target.reset();
+    } else {
+        s.profile_name.clear();
+    }
+    s.selected_profile = slot;
+    return true;
+}
 bool validate(const Settings& s, std::string& error) {
     try {
         require(s.audio.backend == "directsound" || s.audio.backend == "wasapi",
@@ -165,27 +257,14 @@ bool validate(const Settings& s, std::string& error) {
                 "Invalid audio setting");
         require(s.advanced.base_clock_hz >= 1000000 && s.advanced.base_clock_hz <= 85920000,
                 "Invalid base clock");
-        require(s.input.count >= 1 && s.input.count <= 5, "Invalid controller count");
-        for (const auto& player : s.input.players) {
-            require(player.buttons == 2 || player.buttons == 6, "Invalid controller button mode");
-            for (int n : player.keyboard)
-                require(n > 0 && n <= 255, "Invalid keyboard mapping");
-            for (int n : player.pad)
-                require(n >= 0 && n < 32, "Invalid pad mapping");
-            for (int n : player.xinput)
-                require(n >= 0 && n < 12, "Invalid XInput mapping");
-            if (player.device != "keyboard" && rxpce_input::xinput_slot(player.device) < 0) {
-                require(player.device.size() == 38 && player.device.front() == '{' &&
-                            player.device.back() == '}',
-                        "Invalid input device GUID");
-                for (std::size_t n = 1; n < 37; ++n) {
-                    const char c = player.device[n];
-                    const bool hyphen = n == 9 || n == 14 || n == 19 || n == 24;
-                    require(hyphen ? c == '-'
-                                   : ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
-                                      (c >= 'A' && c <= 'F')),
-                            "Invalid input device GUID");
-                }
+        require(valid_slot(s.selected_profile), "Invalid selected input profile");
+        require(!s.inactive_profiles[s.selected_profile - 1], "Duplicate selected input profile");
+        validate_profile_name(s.profile_name);
+        validate_mapping(s.input);
+        for (const auto& profile : s.inactive_profiles) {
+            if (profile) {
+                validate_profile_name(profile->name);
+                validate_mapping(profile->mapping);
             }
         }
         for (const auto* path : {&s.video.palette_file, &s.folders.rom, &s.folders.state}) {
@@ -236,22 +315,34 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         read(a, "latency_ms", s.audio.latency_ms);
         read(a, "cooperative_level", s.audio.cooperative_level);
         const auto& i = object(field(r, "input"));
-        read(i, "count", s.input.count);
         read(i, "xinput_enabled", s.input.xinput_enabled);
         read(i, "directinput_enabled", s.input.directinput_enabled);
-        const auto players = i.find("players");
-        if (players != i.end()) {
-            require(players->second.is<picojson::array>(), "Invalid players array");
-            const auto& array = players->second.get<picojson::array>();
-            require(array.size() == 5, "Expected five player profiles");
-            for (std::size_t n = 0; n < 5; ++n) {
-                const auto& p = object(array[n]);
-                auto& player = s.input.players[n];
-                read(p, "device", player.device);
-                read(p, "buttons", player.buttons);
-                read(p, "keyboard", player.keyboard);
-                read(p, "pad", player.pad);
-                read(p, "xinput", player.xinput);
+        const auto profiles = i.find("profiles");
+        if (profiles == i.end()) {
+            require(i.count("selected_profile") == 0, "Missing input profiles");
+            read_mapping(i, s.input);
+        } else {
+            require(i.count("selected_profile") != 0, "Missing selected input profile");
+            read(i, "selected_profile", s.selected_profile);
+            require(valid_slot(s.selected_profile), "Invalid selected input profile");
+            require(profiles->second.is<picojson::array>(), "Invalid input profiles array");
+            const auto& slots = profiles->second.get<picojson::array>();
+            require(slots.size() == Settings::input_profile_count, "Expected ten input profiles");
+            for (int slot = 1; slot <= Settings::input_profile_count; ++slot) {
+                const auto& value = slots[slot - 1];
+                if (value.is<picojson::null>()) {
+                    require(slot != s.selected_profile, "Selected input profile is empty");
+                    continue;
+                }
+                const auto& profile = object(value);
+                if (slot == s.selected_profile) {
+                    read(profile, "name", s.profile_name);
+                    read_mapping(profile, s.input);
+                } else {
+                    auto& inactive = s.inactive_profiles[slot - 1].emplace();
+                    read(profile, "name", inactive.name);
+                    read_mapping(profile, inactive.mapping);
+                }
             }
         }
         const auto& f = object(field(r, "folders"));
@@ -297,18 +388,18 @@ std::string encode(const Settings& s) {
     a["channels"] = val(s.audio.channels);
     a["latency_ms"] = val(s.audio.latency_ms);
     a["cooperative_level"] = val(s.audio.cooperative_level);
-    picojson::array players;
-    for (const auto& player : s.input.players) {
-        picojson::object p;
-        p["device"] = val(player.device);
-        p["buttons"] = val(player.buttons);
-        p["keyboard"] = val(player.keyboard);
-        p["pad"] = val(player.pad);
-        p["xinput"] = val(player.xinput);
-        players.push_back(picojson::value(p));
+    picojson::array profiles;
+    for (int slot = 1; slot <= Settings::input_profile_count; ++slot) {
+        const auto& inactive = s.inactive_profiles[slot - 1];
+        if (slot == s.selected_profile)
+            profiles.push_back(encode_profile(s.profile_name, s.input));
+        else if (inactive)
+            profiles.push_back(encode_profile(inactive->name, inactive->mapping));
+        else
+            profiles.emplace_back();
     }
-    i["count"] = val(s.input.count);
-    i["players"] = picojson::value(players);
+    i["profiles"] = picojson::value(profiles);
+    i["selected_profile"] = val(s.selected_profile);
     i["xinput_enabled"] = val(s.input.xinput_enabled);
     i["directinput_enabled"] = val(s.input.directinput_enabled);
     f["rom"] = val(s.folders.rom);

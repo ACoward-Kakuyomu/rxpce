@@ -14,24 +14,43 @@ enum class ShortcutCommand {
     toggle_fps,
     stop,
     quit,
-    reset
+    reset,
+    input_profile
 };
 struct ShortcutResult {
     bool handled;
     ShortcutCommand command;
+    int profile_slot = 0;
 };
 class Shortcuts {
   public:
     void reset() {
-        alt_enter = false;
+        alt_shortcut = false;
+        profile_digits = 0;
     }
     ShortcutResult process(UINT message, WPARAM key, LPARAM flags, bool running,
                            bool fullscreen = false) {
         const bool repeated = (flags & (LPARAM(1) << 30)) != 0;
+        const bool alt = (flags & (LPARAM(1) << 29)) != 0;
+        if (key >= '0' && key <= '9') {
+            const unsigned digit = static_cast<unsigned>(key - '0');
+            const unsigned bit = 1u << digit;
+            if (message == WM_SYSKEYDOWN && alt) {
+                alt_shortcut = true;
+                profile_digits |= bit;
+                return {true, ShortcutCommand::input_profile,
+                        running || repeated ? 0 : (digit == 0 ? 10 : static_cast<int>(digit))};
+            }
+            if ((message == WM_SYSKEYUP || message == WM_KEYUP) && (profile_digits & bit)) {
+                profile_digits &= ~bit;
+                return {true, ShortcutCommand::input_profile};
+            }
+            if (message == WM_KEYDOWN && repeated && (profile_digits & bit))
+                return {true, ShortcutCommand::input_profile};
+        }
         if (key == VK_F10 && (message == WM_KEYDOWN || message == WM_KEYUP ||
                               message == WM_SYSKEYDOWN || message == WM_SYSKEYUP)) {
             const bool pressed = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-            const bool alt = (flags & (LPARAM(1) << 29)) != 0;
             return {true, pressed && running && !repeated && !alt ? ShortcutCommand::reset
                                                                   : ShortcutCommand::none};
         }
@@ -58,20 +77,21 @@ class Shortcuts {
         if (message == WM_SYSKEYDOWN && key == VK_F4 && (flags & (LPARAM(1) << 29)))
             return {true, repeated ? ShortcutCommand::none : ShortcutCommand::quit};
         if (message == WM_SYSKEYDOWN && key == VK_RETURN && (flags & (LPARAM(1) << 29))) {
-            alt_enter = true;
+            alt_shortcut = true;
             return {true,
                     running && !repeated ? ShortcutCommand::fullscreen : ShortcutCommand::none};
         }
         if (key == VK_RETURN && (message == WM_SYSCHAR || message == WM_SYSKEYUP))
             return {true, ShortcutCommand::none};
-        if (message == WM_SYSKEYUP && key == VK_MENU && alt_enter) {
-            alt_enter = false;
+        if ((message == WM_SYSKEYUP || message == WM_KEYUP) && key == VK_MENU && alt_shortcut) {
+            alt_shortcut = false;
             return {true, ShortcutCommand::none};
         }
         return {false, ShortcutCommand::none};
     }
 
   private:
-    bool alt_enter = false;
+    bool alt_shortcut = false;
+    unsigned profile_digits = 0;
 };
 } // namespace rxpce_video

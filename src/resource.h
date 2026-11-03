@@ -22,6 +22,11 @@
 #define IDC_OPEN 32779
 #define IDC_ABOUT 32780
 #define IDC_STOP 32781
+#define IDC_INPUT_PROFILE_FIRST 32782
+#define IDC_INPUT_PROFILE_LAST 32791
+#define IDC_PROFILE_NAME 2211
+#define IDC_PROFILE_NAME_LABEL 2212
+#define IDC_PROFILE_SLOT 2213
 
 // Next default values for new objects
 //

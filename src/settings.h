@@ -4,6 +4,7 @@
 #include <atomic>
 #include <string>
 #include <filesystem>
+#include <optional>
 #include "video_layout.h"
 namespace rxpce_config {
 struct Settings {
@@ -26,11 +27,22 @@ struct Settings {
         std::array<int, 10> pad{{0, 1, 4, 5, 2, 3, 6, 7, 8, 9}};
         std::array<int, 10> xinput{{0, 1, 4, 5, 7, 6, 2, 3, 4, 5}};
     };
-    struct Input {
+    struct PlayerInput {
         int count = 1;
-        bool xinput_enabled = true, directinput_enabled = false;
         std::array<Player, 5> players;
+    };
+    struct Input : PlayerInput {
+        bool xinput_enabled = true, directinput_enabled = false;
     } input;
+    struct InputProfile {
+        std::string name;
+        PlayerInput mapping;
+    };
+    static constexpr int input_profile_count = 10;
+    int selected_profile = 1;
+    std::string profile_name;
+    // The selected slot is represented by input and profile_name.
+    std::array<std::optional<InputProfile>, input_profile_count> inactive_profiles{};
     struct Folders {
         std::string rom, state = ".";
     } folders;
@@ -49,6 +61,7 @@ struct RuntimeOverrides {
     bool auto_skip = false, skip = false, fps = false, rom = false;
 };
 void merge_runtime(Settings& pending, const Settings& runtime, const RuntimeOverrides& overrides);
+bool select_input_profile(Settings& settings, int slot);
 bool decode(const std::string& json, Settings& settings, std::string& error);
 std::string encode(const Settings& settings);
 bool validate(const Settings& settings, std::string& error);

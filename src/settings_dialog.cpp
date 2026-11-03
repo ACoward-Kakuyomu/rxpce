@@ -260,22 +260,30 @@ LRESULT SettingsDialog::OnInit(UINT, WPARAM, LPARAM, BOOL&) {
         add(1, L"STATIC", L"0: Write primary   1: Exclusive   2: Priority", coop_label, 20, 138,
             370, 12);
         update_audio_controls();
-        label(2, L"Players", 20, 30, 45);
-        add(2, L"COMBOBOX", L"", count, 65, 28, 45, 100, combo);
+        label(2, L"Profile", 20, 30, 43);
+        add(2, L"COMBOBOX", L"", IDC_PROFILE_SLOT, 65, 28, 45, 150, combo);
+        for (int slot = 1; slot <= rxpce_config::Settings::input_profile_count; ++slot)
+            combo_item(IDC_PROFILE_SLOT, std::to_wstring(slot), slot);
+        select_data(IDC_PROFILE_SLOT, value.selected_profile);
+        add(2, L"STATIC", L"Name", IDC_PROFILE_NAME_LABEL, 130, 30, 40, 12, 0);
+        add(2, L"EDIT", L"", IDC_PROFILE_NAME, 175, 28, 215, 14, edit, WS_EX_CLIENTEDGE);
+        set_text(IDC_PROFILE_NAME, value.profile_name);
+        label(2, L"Players", 20, 46, 45);
+        add(2, L"COMBOBOX", L"", count, 65, 44, 45, 100, combo);
         for (int n = 1; n <= 5; ++n)
             combo_item(count, std::to_wstring(n), n);
         select_data(count, value.input.count);
-        label(2, L"Player", 130, 30, 40);
-        add(2, L"COMBOBOX", L"", port, 175, 28, 45, 100, combo);
+        label(2, L"Player", 130, 46, 40);
+        add(2, L"COMBOBOX", L"", port, 175, 44, 45, 100, combo);
         list_players();
-        label(2, L"Buttons", 245, 30, 45);
-        add(2, L"COMBOBOX", L"", mode, 300, 28, 90, 70, combo);
+        label(2, L"Buttons", 245, 46, 45);
+        add(2, L"COMBOBOX", L"", mode, 300, 44, 90, 70, combo);
         combo_item(mode, L"2 buttons", 2);
         combo_item(mode, L"6 buttons", 6);
-        label(2, L"Input device", 20, 50);
-        add(2, L"COMBOBOX", L"", device, 130, 48, 260, 150, combo);
+        label(2, L"Input device", 20, 64);
+        add(2, L"COMBOBOX", L"", device, 130, 62, 260, 150, combo);
         for (int n = 0; n < 12; ++n) {
-            const int x = n < 6 ? 20 : 220, y = 72 + (n % 6) * 13;
+            const int x = n < 6 ? 20 : 220, y = 80 + (n % 6) * 12;
             add(2, L"STATIC", L"", label_base + n, x, y, 45, 12);
             HWND control = add(2, L"COMBOBOX", L"", map_base + n, x + 45, y - 2, n < 6 ? 135 : 125,
                                140, combo);
@@ -620,6 +628,7 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
         }
         if (id == IDOK) {
             collect_mappings();
+            value.profile_name = text(IDC_PROFILE_NAME);
             value.audio.backend = IsDlgButtonChecked(wasapi_backend) ? "wasapi" : "directsound";
             value.video.adapter = selected(adapter);
             value.video.zoom = selected(zoom);
@@ -646,8 +655,23 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
             std::string error;
             if (!validate(value, error))
                 throw std::runtime_error(error);
+            rxpce_config::select_input_profile(value, active_profile);
             value.advanced.base_clock_hz -= value.advanced.base_clock_hz % 1000;
             EndDialog(IDOK);
+        } else if (!initializing && id == IDC_PROFILE_SLOT && code == CBN_SELCHANGE) {
+            const int slot = selected(IDC_PROFILE_SLOT);
+            select_data(IDC_PROFILE_SLOT, value.selected_profile);
+            value.profile_name = text(IDC_PROFILE_NAME);
+            collect_mappings();
+            if (rxpce_config::select_input_profile(value, slot)) {
+                select_data(IDC_PROFILE_SLOT, slot);
+                set_text(IDC_PROFILE_NAME, value.profile_name);
+                select_data(count, value.input.count);
+                player = 0;
+                list_players();
+                load_player();
+                show_page(2);
+            }
         } else if (!initializing && code == CBN_SELCHANGE &&
                    (id == device || id == mode || id == port || id == count)) {
             collect_mappings();

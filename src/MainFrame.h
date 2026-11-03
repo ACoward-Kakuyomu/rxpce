@@ -24,6 +24,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_DPICHANGED, OnVideoDpiChanged)
     MESSAGE_HANDLER(WM_APP + 8, OnMainLoopExited)
     COMMAND_RANGE_HANDLER(IDC_EXIT, IDC_STOP, OnCommand)
+    COMMAND_RANGE_HANDLER(IDC_INPUT_PROFILE_FIRST, IDC_INPUT_PROFILE_LAST, OnInputProfile)
     CHAIN_MSG_MAP(WTL::CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
   private:
@@ -61,6 +62,9 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     void OnOpen();
     void OnSettings();
     void CaptureRuntime();
+    bool CanSelectInputProfile() const;
+    void UpdateInputProfileLabels();
+    LRESULT OnInputProfile(WORD, WORD, HWND, BOOL&);
     LRESULT OnCommand(WORD, WORD, HWND, BOOL&);
     LRESULT OnCreate(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnClose(UINT, WPARAM, LPARAM, BOOL&);

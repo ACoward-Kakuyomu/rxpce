@@ -44,7 +44,8 @@ class SettingsDialog : public ATL::CDialogImpl<SettingsDialog> {
   public:
     enum { IDD = IDD_SETTINGS };
     rxpce_config::Settings value;
-    explicit SettingsDialog(const rxpce_config::Settings& settings) : value(settings) {}
+    explicit SettingsDialog(const rxpce_config::Settings& settings)
+        : value(settings), active_profile(settings.selected_profile) {}
     BEGIN_MSG_MAP(SettingsDialog)
     MESSAGE_HANDLER(WM_INITDIALOG, OnInit)
     MESSAGE_HANDLER(WM_NOTIFY, OnNotify)
@@ -54,6 +55,7 @@ class SettingsDialog : public ATL::CDialogImpl<SettingsDialog> {
     MESSAGE_HANDLER(WM_COMMAND, OnCommand)
     END_MSG_MAP()
   private:
+    const int active_profile;
     struct Device {
         std::string id;
         std::wstring name;
