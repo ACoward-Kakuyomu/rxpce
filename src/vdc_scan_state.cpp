@@ -20,7 +20,7 @@ std::vector<char> encode_vdc_scan(const rxpce_video::VdcScanState& s) {
     for (auto v :
          {s.h_remaining, s.v_remaining, s.raster, s.y_counter, static_cast<std::uint16_t>(s.row)})
         w.number(v, 2);
-    w.number(s.burst, 1);
+    w.number(unsigned(s.burst) | (unsigned(s.external_sync) << 1), 1);
     w.number(s.y_pending, 1);
     w.number(s.vblank_pending, 1);
     if (w.data.size() != vdc_scan_state_bytes)
@@ -50,7 +50,11 @@ bool decode_vdc_scan(const char* data, std::size_t size, rxpce_video::VdcScanSta
         for (auto p : {&s.h_remaining, &s.v_remaining, &s.raster, &s.y_counter})
             *p = static_cast<std::uint16_t>(r.number(2));
         s.row = static_cast<std::int16_t>(r.signed_number(2));
-        s.burst = r.boolean();
+        const auto flags = r.number(1);
+        if (flags & ~3u)
+            throw std::invalid_argument("Invalid VDC sync flags");
+        s.burst = (flags & 1) != 0;
+        s.external_sync = (flags & 2) != 0;
         s.y_pending = r.boolean();
         s.vblank_pending = r.boolean();
         rxpce_video::VdcScan checked;

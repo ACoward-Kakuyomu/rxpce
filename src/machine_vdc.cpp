@@ -268,7 +268,7 @@ void AdvanceMachineVdc(Machine& m, std::uint64_t cpu_target) {
             (std::min)(prior_dots, std::uint64_t(m.vdc.sprite_fetch_remaining)));
         m.vdc.scan.advance_to(after.dots, scan_event, &m);
         if (after.line_master == 0)
-            m.vdc.scan.begin_line(scan_event, &m);
+            m.vdc.scan.begin_line(scan_event, &m, LineOrigin::external_sync_release);
         if (!low && m.vce_clock.vsync_low())
             m.vdc.scan.vertical_sync(scan_event, &m);
         m.frame_lines = after.frame_lines;

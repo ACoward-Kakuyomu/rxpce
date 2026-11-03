@@ -8,6 +8,8 @@ namespace {
 // timing approximation; short back porches hold it at their start.
 constexpr unsigned bxr_prefetch_dots = 20;
 constexpr unsigned byr_prefetch_dots = 21;
+// Adopted external-sync pipeline approximation; see p8012_display_artifacts.md.
+constexpr unsigned external_sync_delay = 8;
 void latch_y(VdcScanState& s) {
     if (s.v_phase != VPeriod::display)
         return;
@@ -23,7 +25,7 @@ void latch_y(VdcScanState& s) {
 unsigned horizontal_length(const VdcScanState& s) {
     switch (s.h_phase) {
     case HPeriod::sync:
-        return ((s.active.hsr & 31) + 1) * 8;
+        return s.external_sync ? external_sync_delay : ((s.active.hsr & 31) + 1) * 8;
     case HPeriod::back:
         return (((s.active.hsr >> 8) & 127) + 1) * 8;
     case HPeriod::display:
@@ -182,7 +184,7 @@ void VdcScan::enter_vertical(VPeriod period, Sink sink, void* context) {
     if (zero_front)
         emit(ScanEventKind::vertical_sync_start, sink, context);
 }
-void VdcScan::begin_line(Sink sink, void* context) {
+void VdcScan::begin_line(Sink sink, void* context, LineOrigin origin) {
     auto& s = state_;
     if (s.dot_time <= s.last_line_dot ||
         s.physical_line == (std::numeric_limits<std::uint64_t>::max)())
@@ -190,6 +192,7 @@ void VdcScan::begin_line(Sink sink, void* context) {
     s.last_line_dot = s.dot_time;
     ++s.physical_line;
     s.active.memory = (s.active.memory & ~0x80u) | (s.requested.memory & 0x80);
+    s.external_sync = origin == LineOrigin::external_sync_release;
     enter_horizontal(HPeriod::sync, sink, context);
     s.raster = (s.raster + 1) & 1023;
     if (s.v_phase == VPeriod::back && s.v_remaining == 2)
@@ -260,8 +263,9 @@ void VdcScan::restore(const VdcScanState& s) {
         (s.v_phase == VPeriod::display ? s.row != int(a.vdw + 1 - s.v_remaining) : s.row != -1))
         throw std::invalid_argument("Invalid VDC scan state");
     const unsigned lengths[] = {
-        unsigned((a.hsr & 31) + 1) * 8, unsigned(((a.hsr >> 8) & 127) + 1) * 8,
-        unsigned((a.hdr & 127) + 1) * 8, unsigned(((a.hdr >> 8) & 127) + 1) * 8};
+        s.external_sync ? external_sync_delay : unsigned((a.hsr & 31) + 1) * 8,
+        unsigned(((a.hsr >> 8) & 127) + 1) * 8, unsigned((a.hdr & 127) + 1) * 8,
+        unsigned(((a.hdr >> 8) & 127) + 1) * 8};
     std::uint64_t completed = 0;
     for (unsigned n = 0; n < static_cast<unsigned>(s.h_phase); ++n)
         completed += lengths[n];

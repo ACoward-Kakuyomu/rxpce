@@ -251,19 +251,20 @@ unsigned HuC6280::alu(std::uint8_t op) {
         cycles = 7;
         break;
     }
-    const bool transfer = (s.p & T) && (group <= 3 || group == 7);
+    const bool transfer = (s.p & T) && group <= 3;
     s.p &= ~T;
     if (group == 4) {
         write(address, s.a, cycles);
     } else {
-        // Keep immediate and active T read/write paths at their
-        // existing prefix positions. Decimal adjustment follows the source read.
+        // Immediate operands keep their prefix position. Active T memory
+        // sources share the ordinary read position, then use a separate
+        // direct-page read/write tail. Only ordinary terminal reads sample IRQ.
         const bool terminal = !transfer && cycles != 2;
         const bool decimal = (group == 3 || group == 7) && (s.p & D);
-        const auto operand = read(address, terminal ? cycles : 0, terminal && !decimal);
+        const auto operand = read(address, cycles != 2 ? cycles : 0, terminal && !decimal);
         const auto saved_a = s.a;
         if (transfer) {
-            s.a = read(0x2000 + s.x);
+            s.a = read(0x2000 + s.x, cycles + 1);
             cycles += 3;
         }
         if ((group == 3 || group == 7) && (s.p & D)) {
@@ -299,7 +300,7 @@ unsigned HuC6280::alu(std::uint8_t op) {
             delegate(std::uint8_t((op & 0xe0) | 0x09), operand);
         }
         if (transfer) {
-            write(0x2000 + s.x, s.a);
+            write(0x2000 + s.x, s.a, cycles - 1);
             s.a = saved_a;
         }
     }

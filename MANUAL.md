@@ -1,5 +1,10 @@
 # rxpce 1.4.0 操作説明書 / User Manual
 
+
+1.4.0公開後の開発版です。Tフラグが有効な演算のメモリーアクセス時刻を改善し、SBCへのTフラグ誤適用と、長い水平同期幅設定でラスタ割り込みが消失して表示が崩れる問題を修正しています。**正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 新規開始して新しいステートを作成してください。ゲーム内セーブと設定は引き続き利用できます。
+
+This is a development build after 1.4.0, improving memory access timing for operations with the T flag active, correcting T-flag handling for SBC and a display regression caused by lost raster interrupts with long horizontal sync width settings. **Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** Start normally and create new states. In-game saves and settings remain usable.
+
 rxpce 1.4.0では、画面分割部のちらつき・表示崩れと通常CPUのデータ読出し時刻を改善し、表示の保持、6ボタン入力、I/O読出し、CD取り込み、診断ログを修正しました。ゲーム内セーブと設定は引き続き利用できます。
 
 rxpce 1.4.0 improves split-screen rendering and the timing of ordinary CPU data reads, with fixes for frame retention, six-button input, I/O reads, CD capture and diagnostic logging. In-game saves and settings remain usable.
@@ -212,7 +217,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-**正式版1.3.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+**正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
@@ -448,7 +453,7 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-**Save states from official releases 1.3.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
+**Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 

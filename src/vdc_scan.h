@@ -3,6 +3,7 @@
 #include <optional>
 namespace rxpce_video {
 enum class HPeriod : std::uint8_t { sync, back, display, front, waiting };
+enum class LineOrigin : std::uint8_t { sync_start, external_sync_release };
 enum class VPeriod : std::uint8_t { sync, back, display, front };
 enum class ScanRegister {
     control,
@@ -33,6 +34,7 @@ struct VdcScanState {
     std::uint16_t h_remaining = 8, v_remaining = 1, raster = 0, y_counter = 0;
     std::int16_t row = -1;
     bool burst = true, y_pending = false, vblank_pending = false;
+    bool external_sync = false; // Current line began at external HSYNC release.
 };
 enum class ScanEventKind {
     hsync_start,
@@ -63,8 +65,10 @@ class VdcScan {
     }
     void write(ScanRegister, std::uint16_t);
     void advance_to(std::uint64_t dot_time, Sink = nullptr, void* context = nullptr);
-    // First advance to the external edge, then signal it. Sinks may not reenter this model.
-    void begin_line(Sink = nullptr, void* context = nullptr);
+    // Advance to the edge first. External release uses a fixed pipeline delay,
+    // rather than repeating the programmable sync pulse that has already ended.
+    // Sinks may not reenter this model.
+    void begin_line(Sink = nullptr, void* context = nullptr, LineOrigin = LineOrigin::sync_start);
     void vertical_sync(Sink = nullptr, void* context = nullptr);
     std::optional<std::uint64_t> next_event_dot() const;
     bool dma_window_open() const noexcept;
