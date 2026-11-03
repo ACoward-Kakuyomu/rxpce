@@ -1,3 +1,4 @@
+#include "replay_session.h"
 /*
 	Portable PC-Engine Emulator
 	1998 by BERO bero@geocities.co.jp
@@ -208,7 +209,7 @@ std::wstring CdStatePath(const std::filesystem::path& folder) {
 static rxpce_cd::StateBinding CurrentCdBinding() {
     auto& machine = CurrentMachine();
     return {static_cast<std::uint32_t>(machine.configuration.kind),
-            static_cast<std::uint32_t>(rxpce_host::runtime.base_clock_hz),
+            machine.cpu_clock_hz,
             machine.cd_session->bios.profile.rom_sha256, machine.cd_session->disc.identity()};
 }
 void SynchronizeCdState() {
@@ -359,7 +360,7 @@ void ResetPCE(PceCpu* state) {
     rxpce_machine::ResetMachineVdc(machine);
     ResetPceCpu(*state, machine.bus(), machine.line_period, machine.timer_period);
     if (machine.cd_session) {
-        machine.cd_controller.reset(rxpce_host::runtime.base_clock_hz);
+        machine.cd_controller.reset(machine.cpu_clock_hz);
         machine.cd_execution_logged = false;
     }
 #ifdef SOUND
@@ -367,7 +368,7 @@ void ResetPCE(PceCpu* state) {
 #endif
 }
 
-static int InitPCE(const std::filesystem::path& backmemname) {
+static int InitPCE(const std::filesystem::path& backmemname, bool replaying) {
     auto& machine = CurrentMachine();
     machine.backup_writable = false;
     machine.cartridge_ram_writable = false;
@@ -383,7 +384,7 @@ static int InitPCE(const std::filesystem::path& backmemname) {
                 0);
     machine.ram_path.clear();
     machine.cartridge_ram_writable = false;
-    if (CartridgeFlags() & rxpce_rom::populous_ram) {
+    if (!replaying && (CartridgeFlags() & rxpce_rom::populous_ram)) {
         StateFilePath(); // Create the configured state directory as for F5.
         machine.ram_path = rxpce_rom::ram_path(machine.source, rxpce_host::runtime.state_directory);
         std::string error;
@@ -403,6 +404,8 @@ static int InitPCE(const std::filesystem::path& backmemname) {
                 0);
     std::fill_n(machine.backup_ram.data(),
                 (machine.backup_ram.size() * sizeof(machine.backup_ram[0])), 0);
+    if (replaying)
+        return 0;
     std::string error;
     machine.backup_writable = rxpce_storage::load_nvram(
         backmemname.native(), machine.backup_ram.data(),
@@ -416,39 +419,51 @@ static int InitPCE(const std::filesystem::path& backmemname) {
     return 0;
 }
 
-static int RunPCE(void) {
+static int RunPCE(rxpce_replay::Session& replay) {
     auto& machine = CurrentMachine();
     ResetPCE(&machine.cpu);
-    if (!machine.backup_writable)
+    if (!replay.source() && !machine.backup_writable)
         SetInfoString("Can't load backup.dat; existing file will be preserved");
     if (!machine.ram_path.empty() && !machine.cartridge_ram_writable)
         SetInfoString("Can't load cartridge RAM file");
     rxpce_machine::AttachMachineVideo(machine, NativeDevices(), HostFrame());
+    machine.frame_boundary_pending = false;
+    if (const auto* source = replay.source()) {
+        machine.io.controllers.configure(source->players, source->pad_modes);
+        if (!replay.begin_playback(machine))
+            return 0;
+    }
+    struct Context {
+        Machine& machine;
+        rxpce_replay::Session& replay;
+    } context{machine, replay};
     PceCpuHost host{
         machine.bus(),
-        [](void*) { return IsMachineStopRequested(); },
+        [](void* p) {
+            return IsMachineStopRequested() && !static_cast<Context*>(p)->replay.recording();
+        },
         [](PceCpu& cpu, void* context) {
-            rxpce_machine::TickMachineLine(*static_cast<Machine*>(context), NativeDevices(),
+            rxpce_machine::TickMachineLine(static_cast<Context*>(context)->machine, NativeDevices(),
                                            HostFrame(), cpu.device_time);
         },
         [](PceCpu&, void* context) {
-            rxpce_machine::TickMachineTimer(*static_cast<Machine*>(context));
+            rxpce_machine::TickMachineTimer(static_cast<Context*>(context)->machine);
         },
-        [](void* context) -> byte { return static_cast<Machine*>(context)->io.irq_status & 7; },
-        [](void* context) -> byte { return static_cast<Machine*>(context)->io.irq_mask & 7; },
+        [](void* context) -> byte { return static_cast<Context*>(context)->machine.io.irq_status & 7; },
+        [](void* context) -> byte { return static_cast<Context*>(context)->machine.io.irq_mask & 7; },
 #ifdef _DEBUG
         [](PceCpu& cpu, void* context) {
-            return DebugTrace(&cpu, static_cast<Machine*>(context)->bus());
+            return DebugTrace(&cpu, static_cast<Context*>(context)->machine.bus());
         },
 #else
         nullptr,
 #endif
-        &machine};
+        &context};
     host.line_deadline = [](const PceCpu&, void* context) {
-        return rxpce_machine::NextMachineLine(*static_cast<Machine*>(context));
+        return rxpce_machine::NextMachineLine(static_cast<Context*>(context)->machine);
     };
     host.clock = [](PceCpu& cpu, void* context) {
-        auto& machine = *static_cast<Machine*>(context);
+        auto& machine = static_cast<Context*>(context)->machine;
         if (machine.vdc_mode == rxpce_video::VdcMode::accurate)
             rxpce_machine::AdvanceMachineVdc(machine, cpu.device_time);
         if (machine.cd_session) {
@@ -457,13 +472,12 @@ static int RunPCE(void) {
                 (machine.io.irq_status & ~IRQ2) | (machine.cd_controller.irq() ? IRQ2 : 0);
         }
     };
-    machine.frame_boundary_pending = false;
     host.safe_point = [](PceCpu&, void* context) {
-        auto& machine = *static_cast<Machine*>(context);
+        auto& machine = static_cast<Context*>(context)->machine;
         if (!machine.frame_boundary_pending)
-            return !IsMachineStopRequested();
+            return !IsMachineStopRequested() || static_cast<Context*>(context)->replay.recording();
         machine.frame_boundary_pending = false;
-        return rxpce_host::PollHostCommands(machine);
+        return rxpce_host::PollHostCommands(machine, static_cast<Context*>(context)->replay);
     };
     LogDumpDetail("CPU core=MCS6502+HuC6280\n");
     if (RunPceCpu(machine.cpu, host) == PceCpuResult::invalid_instruction) {
@@ -473,9 +487,9 @@ static int RunPCE(void) {
     return 1;
 }
 
-static void TrashPCE(const std::filesystem::path& backmemname) {
+static void TrashPCE(const std::filesystem::path& backmemname, bool replaying) {
     auto& machine = CurrentMachine();
-    if (machine.cartridge_ram_writable && !machine.ram_path.empty()) {
+    if (!replaying && machine.cartridge_ram_writable && !machine.ram_path.empty()) {
         std::string error;
         if (!rxpce_rom::save_ram(machine.ram_path, machine.populous.data(), error)) {
             LogDump("%s: %s\n", error.c_str(), rxpce_paths::utf8(machine.ram_path).c_str());
@@ -483,7 +497,7 @@ static void TrashPCE(const std::filesystem::path& backmemname) {
         } else
             LogDumpDetail("Cartridge RAM saved: %s\n", rxpce_paths::utf8(machine.ram_path).c_str());
     }
-    if (machine.backup_writable) {
+    if (!replaying && machine.backup_writable) {
         std::string error;
         if (!rxpce_storage::save_nvram(backmemname.native(), machine.backup_ram.data(),
                                        (machine.backup_ram.size() * sizeof(machine.backup_ram[0])),
@@ -506,31 +520,35 @@ static void TrashPCE(const std::filesystem::path& backmemname) {
     machine.configuration.kind = rxpce_machine::Kind::hucard;
 }
 
-int rxpce_host::RunEmulation(const std::filesystem::path& backup_file) {
+int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
+                            rxpce_replay::Session* session) {
+    rxpce_replay::Session normal;
+    auto& replay = session ? *session : normal;
+    const auto* source = replay.source();
     int result = -1;
     bool core_started = false;
     try {
         auto& machine = CurrentMachine();
-        machine.vdc_mode = rxpce_host::runtime.vdc_emulation;
+        machine.vdc_mode = source ? source->mode : rxpce_host::runtime.vdc_emulation;
         machine.hardware_sprite_limit = rxpce_host::runtime.hardware_sprite_limit;
         LogDumpDetail("Sprite drawing limit=%s\n",
                       machine.hardware_sprite_limit ? "hardware" : "unrestricted");
         LogDumpDetail("VDC emulation=%s\n",
                       machine.vdc_mode == rxpce_video::VdcMode::fast ? "fast" : "accurate");
-        machine.cpu_clock_hz = static_cast<unsigned>(rxpce_host::runtime.base_clock_hz);
+        machine.cpu_clock_hz = source ? source->clock_hz :
+                               static_cast<unsigned>(rxpce_host::runtime.base_clock_hz);
         machine.line_period =
             static_cast<int>((std::uint64_t(machine.cpu_clock_hz) * rxpce_video::vce_line_ticks +
                               rxpce_video::video_master_hz - 1) /
                              rxpce_video::video_master_hz);
-        LogDumpDetail("Emulation clock=%d period=%d\n", rxpce_host::runtime.base_clock_hz,
+        LogDumpDetail("Emulation clock=%u period=%d\n", machine.cpu_clock_hz,
                       machine.line_period);
         machine.timer_period = 1024;
         if (rxpce_host::InitializeHost(machine)) {
             core_started = true;
-            if (InitPCE(backup_file) == 0) {
+            if (InitPCE(backup_file, source != nullptr) == 0) {
                 SetInfoString("Emulation started");
-                RunPCE();
-                result = 0;
+                result = RunPCE(replay) ? 0 : -1;
             }
         }
     } catch (const std::exception& error) {
@@ -538,7 +556,7 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file) {
         SetInfoString("Emulation failed");
     }
     if (core_started)
-        TrashPCE(backup_file);
+        TrashPCE(backup_file, source != nullptr);
     rxpce_host::ShutdownHost();
     return result;
 }

@@ -1,4 +1,5 @@
 #include "state_service.h"
+#include "replay_media.h"
 #include "file_paths.h"
 #include "machine_runtime.h"
 #include "machine_vdc.h"
@@ -18,6 +19,7 @@ using rxpce_host::CurrentMachine;
 #include "log.h"
 #include "settings.h"
 #include "frame_timing.h"
+#include <algorithm>
 #include <fstream>
 #include <utility>
 
@@ -45,31 +47,107 @@ rxpce_state::SnapshotRequirements requirements(bool cd) {
     value.line_period = machine.cpu.line_period;
     value.timer_period = machine.cpu.timer_period;
     value.cpu_clock_hz = machine.cpu_clock_hz;
-    value.controllers = static_cast<unsigned>(rxpce_config::active_input.count);
-    for (unsigned n = 0; n < 5; ++n)
-        value.buttons[n] = static_cast<std::uint8_t>(rxpce_config::active_input.players[n].buttons);
+    value.controllers = machine.io.controllers.count;
+    value.buttons = machine.io.controllers.modes;
     return value;
 }
+void synchronize_snapshot(rxpce_machine::Machine& machine, bool cd) {
+    rxpce_machine::AdvanceMachineVdc(machine, machine.cpu.cpu.elapsed);
+    if (cd)
+        SynchronizeCdState();
+}
+bool restore_payload(const char* payload, std::size_t base, std::size_t total,
+                     const rxpce_state::SnapshotRequirements& binding, bool cd, bool& sound_ok,
+                     std::string& error) {
+    auto& machine = CurrentMachine();
+    std::unique_ptr<rxpce_state::MachineSnapshot> snapshot;
+    const bool decoded =
+        cd ? rxpce_state::decode_machine(payload, base, binding, snapshot, error)
+           : rxpce_state::decode_hucard(payload, total, binding, snapshot, error);
+    if (!decoded)
+        return false;
+    if (!ValidCartridgeBank(snapshot->bank)) {
+        error = "invalid cartridge bank";
+        return false;
+    }
+    std::unique_ptr<rxpce_cd::MachineState> saved_cd;
+    if (cd) {
+        saved_cd = PrepareCdState(payload + base, total - base, snapshot->cpu.cpu.elapsed, error);
+        if (!saved_cd)
+            return false;
+        if (((snapshot->io.irq_status & 1) != 0) != saved_cd->device.irq()) {
+            error = "IRQ2 mismatch";
+            return false;
+        }
+    }
+    rxpce_state::apply_machine(machine, *snapshot, binding.flags, rxpce_host::HostFrame());
+    if (saved_cd)
+        ApplyCdState(std::move(*saved_cd));
+    RestoreCartridgeBank(snapshot->bank);
+    const auto& sound = saved_cd ? saved_cd->sound : snapshot->sound;
+    sound_ok =
+        RestoreSoundPhase(sound, machine.cpu.cycles(), rxpce_audio::snapshot_psg(machine.io));
+    ResetFrameTiming();
+    error.clear();
+    return true;
+}
 } // namespace
-void SaveState() {
+
+std::vector<char> CaptureStateFile() {
     auto& machine = CurrentMachine();
     const bool cd = IsCdActive();
+    const auto binding = requirements(cd);
+    synchronize_snapshot(machine, cd);
+    const auto sound = CaptureSoundPhase(machine.cpu.cycles());
+    const auto snapshot = rxpce_state::capture_machine(machine, binding.flags);
+    snapshot->sound = sound;
+    auto payload = cd ? rxpce_state::encode_machine(*snapshot, binding)
+                      : rxpce_state::encode_hucard(*snapshot, binding);
+    if (cd)
+        AppendCdState(payload, sound);
+    auto file = rxpce_state::header(payload.size(), binding.flags, binding.vdc_mode);
+    file.insert(file.end(), payload.begin(), payload.end());
+    return file;
+}
+
+rxpce_replay::Digest CaptureReplayDigest() {
+    auto& machine = CurrentMachine();
+    const bool cd = IsCdActive();
+    const auto binding = requirements(cd);
+    synchronize_snapshot(machine, cd);
+    auto snapshot = rxpce_state::capture_machine(machine, binding.flags);
+    snapshot->cpu.Trace = false;
+    snapshot->cpu.Trap = 0xffff;
+    snapshot->palette.fill(0);
+    auto bytes = rxpce_state::encode_machine(*snapshot, binding);
+    if (cd) {
+        const auto controller = machine.cd_controller.save_state(false);
+        bytes.insert(bytes.end(), controller.begin(), controller.end());
+        bytes.insert(bytes.end(), machine.cd_ram.begin(), machine.cd_ram.end());
+        if (binding.flags == 0x200)
+            bytes.insert(bytes.end(), machine.super_ram.begin(), machine.super_ram.end());
+    }
+    return rxpce_replay::hash_bytes(bytes.data(), bytes.size());
+}
+
+bool RestoreStateFile(const std::vector<char>& file, bool& sound_ok, std::string& error) {
+    const bool cd = IsCdActive();
+    const auto binding = requirements(cd);
+    const auto base = rxpce_state::machine_state_bytes(binding.flags);
+    const auto total = cd ? base + CdStateBytes() : rxpce_state::hucard_state_bytes(binding.flags);
+    const auto prefix = rxpce_state::header(total, binding.flags, binding.vdc_mode);
+    if (file.size() != prefix.size() + total ||
+        !std::equal(prefix.begin(), prefix.end(), file.begin())) {
+        error = "State header or length mismatch";
+        return false;
+    }
+    return restore_payload(file.data() + prefix.size(), base, total, binding, cd, sound_ok, error);
+}
+
+void SaveState() {
+    const bool cd = IsCdActive();
     try {
-        const auto binding = requirements(cd);
-        rxpce_machine::AdvanceMachineVdc(machine, machine.cpu.cpu.elapsed);
-        rxpce_audio::PsgPhaseState sound;
-        if (cd) {
-            SynchronizeCdState();
-        }
-        sound = CaptureSoundPhase(machine.cpu.cycles());
-        const auto snapshot = rxpce_state::capture_machine(machine, binding.flags);
-        snapshot->sound = sound;
-        auto payload = cd ? rxpce_state::encode_machine(*snapshot, binding)
-                          : rxpce_state::encode_hucard(*snapshot, binding);
-        if (cd)
-            AppendCdState(payload, sound);
-        auto file = rxpce_state::header(payload.size(), binding.flags, binding.vdc_mode);
-        file.insert(file.end(), payload.begin(), payload.end());
+        const auto file = CaptureStateFile();
         std::string error;
         const bool ok =
             cd ? rxpce_cd::write_state_file(CdStatePath(rxpce_host::runtime.state_directory), file,
@@ -88,7 +166,6 @@ void SaveState() {
     }
 }
 void LoadState() {
-    auto& machine = CurrentMachine();
     const bool cd = IsCdActive();
     try {
         const auto binding = requirements(cd);
@@ -113,40 +190,13 @@ void LoadState() {
                 return;
             }
         }
-        std::unique_ptr<rxpce_state::MachineSnapshot> snapshot;
+        bool sound_ok = false;
         std::string error;
-        const bool decoded =
-            cd ? rxpce_state::decode_machine(payload.data(), base, binding, snapshot, error)
-               : rxpce_state::decode_hucard(payload.data(), total, binding, snapshot, error);
-        if (!decoded) {
+        if (!restore_payload(payload.data(), base, total, binding, cd, sound_ok, error)) {
             LogDumpDetail("State rejected: %s\n", error.c_str());
             SetInfoString("Invalid state; see rxpce.log");
             return;
         }
-        if (!ValidCartridgeBank(snapshot->bank)) {
-            LogDumpDetail("State rejected: invalid cartridge bank\n");
-            SetInfoString("Invalid cartridge bank");
-            return;
-        }
-        std::unique_ptr<rxpce_cd::MachineState> saved_cd;
-        if (cd) {
-            saved_cd = PrepareCdState(payload.data() + base, total - base,
-                                      snapshot->cpu.cpu.elapsed, error);
-            if (!saved_cd || ((snapshot->io.irq_status & 1) != 0) != saved_cd->device.irq()) {
-                LogDumpDetail("CD state rejected: %s\n",
-                              saved_cd ? "IRQ2 mismatch" : error.c_str());
-                SetInfoString("CD state rejected; see rxpce.log");
-                return;
-            }
-        }
-        rxpce_state::apply_machine(machine, *snapshot, binding.flags, rxpce_host::HostFrame());
-        if (saved_cd)
-            ApplyCdState(std::move(*saved_cd));
-        RestoreCartridgeBank(snapshot->bank);
-        const auto& sound = saved_cd ? saved_cd->sound : snapshot->sound;
-        const bool sound_ok =
-            RestoreSoundPhase(sound, machine.cpu.cycles(), rxpce_audio::snapshot_psg(machine.io));
-        ResetFrameTiming();
         LogDumpDetail("State loaded successfully\n");
         SetInfoString(sound_ok ? "State loaded" : "State loaded; audio restart failed");
     } catch (const std::exception& error) {

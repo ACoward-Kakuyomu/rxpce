@@ -94,6 +94,7 @@ class Machine {
     std::size_t rom_banks() const noexcept {
         return rom_.size() / 8192;
     }
+    const std::vector<std::uint8_t>& rom_bytes() const noexcept { return rom_; }
 
   private:
     std::vector<std::uint8_t> rom_;

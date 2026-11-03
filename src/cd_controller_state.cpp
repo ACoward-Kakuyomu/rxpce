@@ -9,7 +9,7 @@ std::size_t Controller::state_bytes() {
     static const auto size = std::make_unique<Controller>()->save_state().size();
     return size;
 }
-std::vector<char> Controller::save_state() const {
+std::vector<char> Controller::save_state(bool include_output) const {
     rxpce_state::Writer w;
     w.block("CDDEV002", 8);
     auto put = [&](std::uint64_t n, unsigned count) { w.number(n, count); };
@@ -62,6 +62,8 @@ std::vector<char> Controller::save_state() const {
     w.real(fade_volume_);
     put(fade_origin_, 8);
     w.real(fade_initial_);
+    if (!include_output)
+        return std::move(w.data);
     put(native_due_, 8);
     put(native_fraction_, 4);
     put(native_previous_, 8);

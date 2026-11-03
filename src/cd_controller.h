@@ -23,7 +23,8 @@ class Controller {
         audio_statistics_ = {};
         return result;
     }
-    std::vector<char> save_state() const;
+    // The core-only prefix is used for replay comparison, not for restoration.
+    std::vector<char> save_state(bool include_output = true) const;
     bool load_state(const char* data, std::size_t size, std::uint64_t cpu_time, std::string& error);
     static std::size_t state_bytes();
     void reset(unsigned clock_hz);

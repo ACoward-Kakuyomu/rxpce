@@ -6,6 +6,7 @@
 #include "machine_commands.h"
 #include "pce.h"
 #include "state_service.h"
+#include "replay_session.h"
 #include "info.h"
 #include "log.h"
 #include <atomic>
@@ -32,11 +33,13 @@ rxpce_host::CommandChannel& MachineCommands() {
 }
 
 namespace rxpce_host {
-bool PollHostCommands(rxpce_machine::Machine& machine) {
-    if (IsMachineStopRequested())
+bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& replay) {
+    auto commands = MachineCommands().take();
+    const bool was_recording = replay.recording();
+    if (!replay.boundary(machine, (commands & EV_REPLAY_RECORD) != 0, IsMachineStopRequested()))
         return false;
-    PollInput(machine);
-    const auto commands = MachineCommands().take();
+    if (was_recording || replay.recording() || replay.source())
+        commands &= ~(EV_SAVE | EV_LOAD | EV_RESET);
     if (commands & EV_SAVE)
         SaveState();
     if (commands & EV_LOAD)

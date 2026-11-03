@@ -57,6 +57,8 @@ CUE版とCHD版のステートは共有できません。CHDで問題が出る�
 | Game → Reset | F10 | 実行中ゲームをリセット |
 | Game → Stop Emulation | Esc | 停止し、開始前の黒い画面へ戻る |
 | Game → Exit | Alt+F4 | アプリケーション終了 |
+| Game → Replay → Start / Stop Recording | F11 | リプレイの記録を開始・終了 |
+| Game → Replay → Play / Stop Replay | F12 | 停止中に再生を開始、再生中に停止 |
 | View → Window Scale | F8 | ウィンドウ倍率を1→2→3→4倍と循環 |
 | View → Fullscreen | Alt+Enter | 全画面／ウィンドウ切替 |
 | View → Input Profiles | Alt+1〜Alt+0 | 停止中に入力プロファイル1〜10を選択 |
@@ -195,6 +197,12 @@ Base clockはCPU基準の進行速度を設定します。映像時計との相�
 
 ### 7. 保存・復帰とファイルの場所
 
+#### 入力リプレイ
+
+HuCardまたはCDのプレイ中にF11で記録を開始し、もう一度F11を押して `.rpl` に保存します。保存ダイアログを取り消した場合は、`Game > Replay > Save Pending Recording...` から再試行できます。停止中にF12を押し、リプレイと対応するゲームを選ぶと再生します。再生を中止するにはF12またはEscを押します。
+
+記録時と同じROM、または同じ形式・内容のディスクと同じSystem Card BIOSが必要です。CUEとCHDはそれぞれ別のリプレイとして扱います。再生中は記録された操作を使い、ゲーム内セーブは一時コピーで扱います。共有するリプレイには記録開始時のゲーム内セーブ内容が含まれます。再現に差が出た場合は `rxpce.log` に照合点を記録します。
+
 ステートは**VDCモードごとに1スロット**です。F5は上書き、F6は復帰です。ゲームを開いて実行可能な状態にしてから操作します。再起動後も同じゲームを開いてF6で復帰できます。
 
 | ファイル | 内容 | 保存先／名前 |
@@ -300,6 +308,8 @@ CUE and CHD states cannot be exchanged. If a CHD fails while the original CUE wo
 | Game → Reset | F10 | Reset the running game |
 | Game → Stop Emulation | Esc | Stop and return to the idle black screen |
 | Game → Exit | Alt+F4 | Quit |
+| Game → Replay → Start / Stop Recording | F11 | Start or finish recording a replay |
+| Game → Replay → Play / Stop Replay | F12 | Start playback while stopped or stop playback |
 | View → Window Scale | F8 | Cycle 1×, 2×, 3× and 4× window scale |
 | View → Fullscreen | Alt+Enter | Toggle fullscreen/windowed mode |
 | View → Input Profiles | Alt+1 through Alt+0 | Select input profile 1–10 while stopped |
@@ -437,6 +447,12 @@ Normal-speed pacing follows completed frame timestamps at a video reference of 2
 Base clock sets CPU-based timing relative to the video clock and also affects PSG/timer progression. CD and audio output convert CPU timestamps to real time using this frequency. Normally leave it at the default. It is not a host-PC performance tuning setting.
 
 ### 7. Save states and file locations
+
+#### Input replays
+
+Press F11 during HuCard or CD play to start recording, then press it again to save an `.rpl` file. If you cancel the save dialog, use `Game > Replay > Save Pending Recording...` to try again. While emulation is stopped, press F12 and select the replay and matching game. Press F12 or Esc to stop playback.
+
+Playback requires the same ROM, or a disc image with the same format and contents and the same System Card BIOS. CUE and CHD use separate replays. Playback uses the recorded inputs and temporary copies of in-game saves. Shared replays contain the in-game save data present when recording began. If playback diverges, the checkpoint is reported in `rxpce.log`.
 
 There is **one save-state slot per VDC mode**. F5 overwrites it; F6 restores it. Open the game and let emulation start before using these commands. After restarting the application, reopen the same game and press F6.
 

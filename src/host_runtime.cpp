@@ -30,7 +30,9 @@ bool InitializeHost(rxpce_machine::Machine& machine) {
         return false;
     }
     InitializeFrameTiming(rxpce_video::vce_line_ticks * 262, rxpce_video::video_master_hz);
-    InitSound(rxpce_host::runtime.sound, hwnd, rxpce_audio::snapshot_psg(machine.io));
+    auto sound = rxpce_host::runtime.sound;
+    sound.base_clock_hz = machine.cpu_clock_hz;
+    InitSound(sound, hwnd, rxpce_audio::snapshot_psg(machine.io));
     InitDInput();
     InitInfo();
     return true;

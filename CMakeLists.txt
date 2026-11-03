@@ -6,6 +6,9 @@ if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8
     message(FATAL_ERROR "This build requires Windows x64 and MSVC with ATL installed.")
 endif()
 
+# Enable cross-module optimization for the supported MSVC Release build.
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON CACHE BOOL "Enable Release interprocedural optimization")
+
 include(cmake/chd_dependencies.cmake)
 
 # Apply the language baseline to our targets, after creating upstream targets.
@@ -51,7 +54,9 @@ add_executable(rxpce WIN32
     src/settings.cpp src/settings_dialog.cpp src/AboutDlg.cpp src/archive.cpp src/video.cpp src/debug.cpp src/frame_timing.cpp
     src/di.cpp src/ds.cpp src/wasapi.cpp src/video_info.cpp src/log.cpp src/d3d11_renderer.cpp src/video_presenter.cpp
     src/MainFrame.cpp src/Pce.cpp src/Sound.cpp src/cd_prepare_dialog.cpp src/state_service.cpp src/machine_runtime.cpp
-    src/host_input.cpp src/host_commands.cpp src/host_runtime.cpp src/rxpce.cpp src/rxpce.rc)
+    src/host_input.cpp src/host_commands.cpp src/host_runtime.cpp
+    src/replay_codec.cpp src/replay_file.cpp src/replay_media.cpp src/replay_timeline.cpp src/replay_session.cpp
+    src/rxpce.cpp src/rxpce.rc)
 target_compile_features(rxpce PRIVATE cxx_std_17)
 target_compile_definitions(rxpce PRIVATE
     _MBCS _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS

@@ -87,6 +87,13 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Reset\tF10", IDC_RESET, GRAYED
         MENUITEM "S&top Emulation\tEsc", IDC_STOP, GRAYED
+        POPUP "Repla&y"
+        BEGIN
+            MENUITEM "Start / Stop &Recording\tF11", IDC_REPLAY_RECORD, GRAYED
+            MENUITEM "&Play / Stop Replay\tF12", IDC_REPLAY_PLAY
+            MENUITEM "&Save Pending Recording...", IDC_REPLAY_SAVE, GRAYED
+            MENUITEM "&Discard Pending Recording", IDC_REPLAY_DISCARD, GRAYED
+        END
         MENUITEM "E&xit\tAlt+F4", IDC_EXIT
     END
     POPUP "&View"

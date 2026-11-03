@@ -60,10 +60,19 @@ LRESULT CMainFrame::OnCreate(UINT, WPARAM, LPARAM, BOOL&) {
 }
 BOOL CMainFrame::OnIdle() {
     const bool ready = MachineCommands().ready();
-    for (const UINT id : {IDC_RESET, IDC_FULLSCREEN, IDC_STOP})
+    const bool replay_busy = ReplayInProgress();
+    for (const UINT id : {IDC_FULLSCREEN, IDC_STOP})
         ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (ready ? MF_ENABLED : MF_GRAYED));
-    for (const UINT id : {IDC_SAVE, IDC_LOAD})
-        ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (ready ? MF_ENABLED : MF_GRAYED));
+    for (const UINT id : {IDC_RESET, IDC_SAVE, IDC_LOAD})
+        ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (ready && !replay_busy ? MF_ENABLED : MF_GRAYED));
+    ::EnableMenuItem(m_menu, IDC_OPEN, MF_BYCOMMAND | (replay_busy ? MF_GRAYED : MF_ENABLED));
+    const bool playback = m_replay && m_replay->source();
+    ::EnableMenuItem(m_menu, IDC_REPLAY_RECORD,
+                     MF_BYCOMMAND | (ready && !playback && !m_pendingRecording ? MF_ENABLED : MF_GRAYED));
+    ::EnableMenuItem(m_menu, IDC_REPLAY_PLAY,
+                     MF_BYCOMMAND | ((!m_thread || playback) ? MF_ENABLED : MF_GRAYED));
+    for (const UINT id : {IDC_REPLAY_SAVE, IDC_REPLAY_DISCARD})
+        ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (m_pendingRecording ? MF_ENABLED : MF_GRAYED));
     ::EnableMenuItem(m_menu, IDC_ZOOM1,
                      MF_BYCOMMAND | (bFullScreen.load() ? MF_GRAYED : MF_ENABLED));
     ::EnableMenuItem(m_menu, IDC_SETTINGS, MF_BYCOMMAND | MF_ENABLED);
@@ -108,14 +117,15 @@ unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
     try {
         if (FAILED(apartment.status))
             throw std::runtime_error("Cannot initialize emulation thread COM apartment");
-        result = rxpce_host::RunEmulation(rxpce_paths::executable().parent_path() / L"backup.dat");
+        result = rxpce_host::RunEmulation(rxpce_paths::executable().parent_path() / L"backup.dat",
+                                         start->frame->m_replay.get());
     } catch (const std::exception& error) {
         LogDump("Emulation start failed: %s\n", error.what());
     }
     start->frame->PostMessage(WM_APP + 8, start->generation);
     return result;
 }
-BOOL CMainFrame::StartMainLoop() {
+BOOL CMainFrame::StartMainLoop(std::shared_ptr<const rxpce_replay::Recording> playback) {
     ResetMachineStop();
     if (!MachineCommands().initialize()) {
         PostMessage(WM_CLOSE);
@@ -124,6 +134,10 @@ BOOL CMainFrame::StartMainLoop() {
     std::unique_ptr<WorkerStart> start;
     try {
         start = std::make_unique<WorkerStart>(WorkerStart{this, ++m_generation});
+        m_replay = std::make_unique<rxpce_replay::Session>(
+            std::move(playback), [window = m_hWnd, generation = m_generation] {
+                ::PostMessage(window, WM_APP + 9, generation, 0);
+            });
     } catch (const std::bad_alloc&) {
         MachineCommands().reset();
         PostMessage(WM_CLOSE);
@@ -148,6 +162,8 @@ void CMainFrame::StopMainLoop() {
         rxpce_ui::wait_for_thread(m_thread.get());
         LogDumpDetail("Emulation worker stopped\n");
         m_thread.reset();
+        CollectFinishedReplay();
+        m_replay.reset();
         m_stopping = false;
     }
     MachineCommands().reset();
@@ -158,8 +174,21 @@ LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
         m_closeAfterPrepare = true;
     } else if (m_stopping)
         PostMessage(WM_CLOSE);
-    else
+    else {
+        if (m_replay && m_replay->recording())
+            StopEmulation(false);
+        CollectFinishedReplay();
+        if (m_pendingRecording) {
+            rxpce_config::DialogInputScope input;
+            const int choice = MessageBox("Save the pending replay before exiting?",
+                                          "Replay recording", MB_YESNOCANCEL | MB_ICONQUESTION);
+            if (choice == IDCANCEL || (choice == IDYES && !SavePendingReplay()))
+                return 0;
+            if (choice == IDNO)
+                m_pendingRecording.reset();
+        }
         handled = FALSE;
+    }
     return 0;
 }
 LRESULT CMainFrame::OnMainLoopExited(UINT, WPARAM generation, LPARAM, BOOL&) {
@@ -211,7 +240,7 @@ void CMainFrame::OnFullScreen() {
 void CMainFrame::OnZoom1() {
     ZoomWindow();
 }
-void CMainFrame::OnOpen() {
+std::wstring CMainFrame::ChooseMediaPath() {
     std::vector<wchar_t> filename(32768);
     OPENFILENAMEW dialog{};
     dialog.lStructSize = sizeof(dialog);
@@ -232,10 +261,111 @@ void CMainFrame::OnOpen() {
         selected = GetOpenFileNameW(&dialog) != FALSE;
     }
     RefreshCursor();
-    if (selected)
-        LoadMediaPath(filename.data());
+    return selected ? std::wstring(filename.data()) : std::wstring{};
 }
-BOOL CMainFrame::LoadMediaPath(const std::wstring& path) {
+void CMainFrame::OnOpen() {
+    if (ReplayInProgress())
+        return;
+    const auto path = ChooseMediaPath();
+    if (!path.empty())
+        LoadMediaPath(path);
+}
+bool CMainFrame::ReplayInProgress() const {
+    return m_replay && (m_replay->source() || m_replay->recording());
+}
+std::wstring CMainFrame::ChooseReplayPath(bool save) {
+    std::vector<wchar_t> filename(32768);
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = m_hWnd;
+    dialog.lpstrFilter = L"rxpce Replay (*.rpl)\0*.rpl\0";
+    dialog.lpstrTitle = save ? L"Save Replay" : L"Open Replay";
+    dialog.lpstrDefExt = L"rpl";
+    dialog.lpstrFile = filename.data();
+    dialog.nMaxFile = static_cast<DWORD>(filename.size());
+    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR |
+                   (save ? OFN_PATHMUSTEXIST : OFN_FILEMUSTEXIST);
+    bool selected = false;
+    {
+        rxpce_config::DialogInputScope input;
+        ::SetCursor(::LoadCursor(nullptr, IDC_ARROW));
+        selected = (save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog)) != FALSE;
+    }
+    RefreshCursor();
+    return selected ? std::wstring(filename.data()) : std::wstring{};
+}
+bool CMainFrame::SavePendingReplay() {
+    if (!m_pendingRecording)
+        return true;
+    const auto path = ChooseReplayPath(true);
+    if (path.empty())
+        return false;
+    rxpce_config::DialogInputScope input;
+    std::error_code exists_error;
+    const bool replace = std::filesystem::exists(path, exists_error);
+    if (replace && MessageBox("Replace the existing replay file?", "Save Replay",
+                              MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES)
+        return false;
+    std::string error;
+    if (!rxpce_replay::save_file(path, *m_pendingRecording, replace, error)) {
+        MessageBox(error.c_str(), "Cannot save replay", MB_OK | MB_ICONERROR);
+        return false;
+    }
+    m_pendingRecording.reset();
+    return true;
+}
+bool CMainFrame::CollectFinishedReplay() {
+    if (!m_replay || m_pendingRecording)
+        return false;
+    m_pendingRecording = m_replay->take_finished();
+    return m_pendingRecording.has_value();
+}
+void CMainFrame::PlayReplay() {
+    if (m_replay && m_replay->source()) {
+        StopEmulation();
+        return;
+    }
+    if (m_thread)
+        return;
+    const auto path = ChooseReplayPath(false);
+    if (path.empty())
+        return;
+    auto recording = std::make_shared<rxpce_replay::Recording>();
+    std::string error;
+    if (!rxpce_replay::load_file(path, *recording, error)) {
+        MessageBox(error.c_str(), "Cannot open replay", MB_OK | MB_ICONERROR);
+        return;
+    }
+    const auto media = ChooseMediaPath();
+    if (!media.empty())
+        LoadMediaPath(media, std::move(recording));
+}
+LRESULT CMainFrame::OnReplayCommand(WORD, WORD id, HWND, BOOL&) {
+    if (m_preparing || m_stopping || rxpce_config::dialog_open)
+        return 0;
+    try {
+        if (id == IDC_REPLAY_PLAY)
+            PlayReplay();
+        else if (id == IDC_REPLAY_RECORD && m_replay && !m_replay->source() && !m_pendingRecording)
+            MachineCommands().post(EV_REPLAY_RECORD);
+        else if (id == IDC_REPLAY_SAVE)
+            SavePendingReplay();
+        else if (id == IDC_REPLAY_DISCARD && m_pendingRecording &&
+                 MessageBox("Discard the pending replay?", "Replay recording",
+                            MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) == IDYES)
+            m_pendingRecording.reset();
+    } catch (const std::exception& error) {
+        ShowFailure(error.what(), "Replay operation failed");
+    }
+    return 0;
+}
+LRESULT CMainFrame::OnReplayFinished(UINT, WPARAM generation, LPARAM, BOOL&) {
+    if (generation == m_generation && CollectFinishedReplay() && !rxpce_config::dialog_open)
+        SavePendingReplay();
+    return 0;
+}
+BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
+                              std::shared_ptr<const rxpce_replay::Recording> playback) {
     if (m_preparing)
         return FALSE;
     auto suffix = path.substr(
@@ -244,7 +374,7 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path) {
         ch = static_cast<wchar_t>(std::towlower(ch));
     if (suffix != L".cue" && suffix != L".chd") {
         try {
-            return LoadPceFile(std::filesystem::path(path));
+            return LoadPceFile(std::filesystem::path(path), std::move(playback));
         } catch (const std::exception& ex) {
             MessageBox(ex.what(), "Cannot load ROM / ZIP", MB_OK | MB_ICONERROR);
             return FALSE;
@@ -302,9 +432,10 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path) {
     SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
     rxpce_cd::queue(std::move(session));
     rxpce_host::runtime.rom_directory = std::filesystem::path(path).parent_path();
-    return StartMainLoop();
+    return StartMainLoop(std::move(playback));
 }
-BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path) {
+BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
+                            std::shared_ptr<const rxpce_replay::Recording> playback) {
     const auto absolute = std::filesystem::absolute(path);
     rxpce_rom::Cartridge image;
     std::string error;
@@ -331,7 +462,7 @@ BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path) {
     rxpce_cd::queue(nullptr);
     rxpce_rom::queue(std::move(image));
     rxpce_host::runtime.rom_directory = source.parent_path();
-    if (!StartMainLoop())
+    if (!StartMainLoop(std::move(playback)))
         return FALSE;
     return TRUE;
 }
@@ -429,6 +560,10 @@ BOOL CMainFrame::PreTranslateMessage(MSG* message) {
         if (side)
             keyboard.event(message->message, side, message->lParam);
     }
+    if (result.command == rxpce_video::ShortcutCommand::record_replay ||
+        result.command == rxpce_video::ShortcutCommand::play_replay)
+        SendMessage(WM_COMMAND, result.command == rxpce_video::ShortcutCommand::record_replay
+                                    ? IDC_REPLAY_RECORD : IDC_REPLAY_PLAY);
     if (result.command == rxpce_video::ShortcutCommand::quit)
         OnExit();
     if (result.command == rxpce_video::ShortcutCommand::stop)
@@ -601,7 +736,8 @@ void CMainFrame::OnSettings() {
     UpdateInputProfileLabels();
     SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
 }
-void CMainFrame::StopEmulation() {
+void CMainFrame::StopEmulation(bool offer_save) {
+    const bool had_pending = m_pendingRecording.has_value();
     StopMainLoop();
     CaptureRuntime();
     if (bFullScreen)
@@ -614,6 +750,8 @@ void CMainFrame::StopEmulation() {
     m_videoShortcuts.reset();
     OnIdle();
     LogDumpDetail("Emulation stopped; idle\n");
+    if (offer_save && !had_pending && m_pendingRecording)
+        SavePendingReplay();
 }
 LRESULT CMainFrame::OnSetCursor(UINT, WPARAM, LPARAM hit, BOOL& handled) {
     if (SetFullscreenCursor(LOWORD(hit), rxpce_config::dialog_open.load()))

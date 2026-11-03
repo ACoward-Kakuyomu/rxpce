@@ -4,6 +4,7 @@
 #include "video_shortcuts.h"
 #include "settings.h"
 #include "unique_handle.h"
+#include "replay_session.h"
 class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
                    public WTL::CMessageFilter,
                    public WTL::CIdleHandler {
@@ -23,8 +24,10 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_VIDEO_SIZE, OnVideoSize)
     MESSAGE_HANDLER(WM_DPICHANGED, OnVideoDpiChanged)
     MESSAGE_HANDLER(WM_APP + 8, OnMainLoopExited)
+    MESSAGE_HANDLER(WM_APP + 9, OnReplayFinished)
     COMMAND_RANGE_HANDLER(IDC_EXIT, IDC_STOP, OnCommand)
     COMMAND_RANGE_HANDLER(IDC_INPUT_PROFILE_FIRST, IDC_INPUT_PROFILE_LAST, OnInputProfile)
+    COMMAND_RANGE_HANDLER(IDC_REPLAY_RECORD, IDC_REPLAY_DISCARD, OnReplayCommand)
     CHAIN_MSG_MAP(WTL::CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
   private:
@@ -34,6 +37,8 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     rxpce_config::RuntimeOverrides m_overrides;
     bool m_configWritable = true;
     rxpce_host::UniqueHandle m_thread;
+    std::unique_ptr<rxpce_replay::Session> m_replay;
+    std::optional<rxpce_replay::Recording> m_pendingRecording;
     unsigned m_generation = 0;
     bool m_stopping = false;
     bool m_preparing = false, m_closeAfterPrepare = false;
@@ -47,19 +52,29 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     BOOL m_profileLoaded = FALSE;
     BOOL LoadProfile();
     void SaveProfile();
-    BOOL StartMainLoop();
+    BOOL StartMainLoop(std::shared_ptr<const rxpce_replay::Recording> playback = {});
     void StopMainLoop();
-    void StopEmulation();
+    void StopEmulation(bool offer_save = true);
     void RefreshCursor();
     void ShowFailure(const char* detail, const char* title);
     void ApplySettings();
-    BOOL LoadPceFile(const std::filesystem::path&);
-    BOOL LoadMediaPath(const std::wstring&);
+    BOOL LoadPceFile(const std::filesystem::path&,
+                     std::shared_ptr<const rxpce_replay::Recording> playback = {});
+    BOOL LoadMediaPath(const std::wstring&,
+                       std::shared_ptr<const rxpce_replay::Recording> playback = {});
     static unsigned __stdcall InvokeMainLoop(void*);
     void OnExit();
     void OnZoom1();
     void OnFullScreen();
     void OnOpen();
+    std::wstring ChooseMediaPath();
+    std::wstring ChooseReplayPath(bool save);
+    bool SavePendingReplay();
+    bool CollectFinishedReplay();
+    bool ReplayInProgress() const;
+    void PlayReplay();
+    LRESULT OnReplayCommand(WORD, WORD, HWND, BOOL&);
+    LRESULT OnReplayFinished(UINT, WPARAM, LPARAM, BOOL&);
     void OnSettings();
     void CaptureRuntime();
     bool CanSelectInputProfile() const;
