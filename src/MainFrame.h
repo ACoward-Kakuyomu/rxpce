@@ -28,6 +28,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     COMMAND_RANGE_HANDLER(IDC_EXIT, IDC_STOP, OnCommand)
     COMMAND_RANGE_HANDLER(IDC_INPUT_PROFILE_FIRST, IDC_INPUT_PROFILE_LAST, OnInputProfile)
     COMMAND_RANGE_HANDLER(IDC_REPLAY_RECORD, IDC_REPLAY_DISCARD, OnReplayCommand)
+    COMMAND_RANGE_HANDLER(IDC_RECENT_GAME_FIRST, IDC_CLEAR_GAME_PROFILE, OnGameHistory)
     CHAIN_MSG_MAP(WTL::CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
   private:
@@ -57,7 +58,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     void StopEmulation(bool offer_save = true);
     void RefreshCursor();
     void ShowFailure(const char* detail, const char* title);
-    void ApplySettings();
+    void ApplySettings(const std::filesystem::path& game = {});
     BOOL LoadPceFile(const std::filesystem::path&,
                      std::shared_ptr<const rxpce_replay::Recording> playback = {});
     BOOL LoadMediaPath(const std::wstring&,
@@ -67,6 +68,8 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     void OnZoom1();
     void OnFullScreen();
     void OnOpen();
+    void UpdateRecentGamesMenu();
+    LRESULT OnGameHistory(WORD, WORD, HWND, BOOL&);
     std::wstring ChooseMediaPath();
     std::wstring ChooseReplayPath(bool save);
     bool SavePendingReplay();

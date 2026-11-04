@@ -34,6 +34,12 @@ bool block_game_input(const unsigned char* keys, bool pad_button_down) {
 }
 Settings::Input active_input;
 namespace {
+std::wstring game_key(const std::filesystem::path& path) {
+    return std::filesystem::absolute(path).lexically_normal().make_preferred().native();
+}
+bool same_game(const std::string& stored, const std::wstring& key) {
+    return CompareStringOrdinal(to_wide(stored).c_str(), -1, key.c_str(), -1, TRUE) == CSTR_EQUAL;
+}
 constexpr std::size_t limit = 128 * 1024;
 void require(bool condition, const char* message) {
     if (!condition)
@@ -219,6 +225,37 @@ void merge_runtime(Settings& p, const Settings& r, const RuntimeOverrides& o) {
     if (!o.rom)
         p.folders.rom = r.folders.rom;
 }
+void remember_game(Settings& s, const std::filesystem::path& path) {
+    const auto key = game_key(path);
+    const auto utf8 = to_utf8(key);
+    auto& recent = s.recent_games;
+    recent.erase(std::remove_if(recent.begin(), recent.end(),
+                                [&](const auto& entry) { return same_game(entry, key); }), recent.end());
+    recent.insert(recent.begin(), utf8);
+    if (recent.size() > Settings::recent_game_count)
+        recent.pop_back();
+}
+int game_profile(const Settings& s, const std::filesystem::path& path) {
+    const auto key = game_key(path);
+    for (const auto& [entry, slot] : s.game_profiles)
+        if (same_game(entry, key))
+            return slot;
+    return 0;
+}
+void assign_game_profile(Settings& s, const std::filesystem::path& path, int slot) {
+    const auto key = game_key(path);
+    auto& profiles = s.game_profiles;
+    const auto existing = std::find_if(profiles.begin(), profiles.end(),
+        [&](const auto& entry) { return same_game(entry.first, key); });
+    if (valid_slot(slot)) {
+        if (existing == profiles.end())
+            profiles.emplace(to_utf8(key), slot);
+        else
+            existing->second = slot;
+    } else if (slot == 0 && existing != profiles.end()) {
+        profiles.erase(existing);
+    }
+}
 bool select_input_profile(Settings& s, int slot) {
     if (!valid_slot(slot) || !valid_slot(s.selected_profile))
         return false;
@@ -274,6 +311,15 @@ bool validate(const Settings& s, std::string& error) {
         require(s.cd.bios_file.find('\0') == std::string::npos &&
                     to_wide(s.cd.bios_file).size() < 32768,
                 "Invalid BIOS path");
+        const auto valid_game_path = [](const std::string& path) {
+            return path.find('\0') == std::string::npos &&
+                   std::filesystem::path(to_wide(path)).is_absolute() && to_wide(path).size() < 32768;
+        };
+        require(s.recent_games.size() <= Settings::recent_game_count, "Too many recent games");
+        for (const auto& path : s.recent_games)
+            require(valid_game_path(path), "Invalid recent game path");
+        for (const auto& [path, slot] : s.game_profiles)
+            require(valid_game_path(path) && valid_slot(slot), "Invalid game profile assignment");
         error.clear();
         return true;
     } catch (const std::exception& e) {
@@ -361,6 +407,18 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         read(x, "base_clock_hz", s.advanced.base_clock_hz);
         read(x, "log", s.advanced.log);
         read(x, "show_fps", s.advanced.show_fps);
+        picojson::array recent;
+        read(r, "recent_games", recent);
+        for (const auto& path : recent) {
+            require(path.is<std::string>(), "Invalid recent game path");
+            s.recent_games.push_back(path.get<std::string>());
+        }
+        const auto& profiles_by_game = object(field(r, "game_profiles"));
+        for (const auto& entry : profiles_by_game) {
+            int slot = 0;
+            read(profiles_by_game, entry.first.c_str(), slot);
+            s.game_profiles.emplace(entry.first, slot);
+        }
         if (!validate(s, error))
             return false;
         s.advanced.base_clock_hz -= s.advanced.base_clock_hz % 1000;
@@ -419,6 +477,14 @@ std::string encode(const Settings& s) {
     r["input"] = picojson::value(i);
     r["folders"] = picojson::value(f);
     r["advanced"] = picojson::value(x);
+    picojson::array recent;
+    for (const auto& path : s.recent_games)
+        recent.push_back(val(path));
+    r["recent_games"] = picojson::value(recent);
+    picojson::object profiles_by_game;
+    for (const auto& [path, slot] : s.game_profiles)
+        profiles_by_game[path] = val(slot);
+    r["game_profiles"] = picojson::value(profiles_by_game);
     return picojson::value(r).serialize(true) + "\n";
 }
 bool load(const std::filesystem::path& path, Settings& settings, std::string& error) {

@@ -5,6 +5,8 @@
 #include <string>
 #include <filesystem>
 #include <optional>
+#include <map>
+#include <vector>
 #include "video_layout.h"
 namespace rxpce_config {
 struct Settings {
@@ -43,6 +45,9 @@ struct Settings {
     std::string profile_name;
     // The selected slot is represented by input and profile_name.
     std::array<std::optional<InputProfile>, input_profile_count> inactive_profiles{};
+    static constexpr std::size_t recent_game_count = 10;
+    std::vector<std::string> recent_games;
+    std::map<std::string, int> game_profiles;
     struct Folders {
         std::string rom, state = ".";
     } folders;
@@ -62,6 +67,9 @@ struct RuntimeOverrides {
 };
 void merge_runtime(Settings& pending, const Settings& runtime, const RuntimeOverrides& overrides);
 bool select_input_profile(Settings& settings, int slot);
+void remember_game(Settings& settings, const std::filesystem::path& path);
+int game_profile(const Settings& settings, const std::filesystem::path& path);
+void assign_game_profile(Settings& settings, const std::filesystem::path& path, int slot);
 bool decode(const std::string& json, Settings& settings, std::string& error);
 std::string encode(const Settings& settings);
 bool validate(const Settings& settings, std::string& error);

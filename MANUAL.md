@@ -161,6 +161,10 @@ Monoは左右の音声の平均です。音声のレート変換による遅延�
 
 パッド設定の手順と初期配置は5節を参照してください。
 
+#### 最近使ったゲーム
+
+`Game → Recent Games` から、最近開いた最大10件のゲームを再度開けます。停止中に入力プロファイルを選び、`Game → Assign Selected Profile to Last Game` を選ぶと、最後に開いたゲームにその枠を割り当てます。次回そのゲームを開くと割り当てた枠が使われます。`Game → Clear Last Game Profile` で解除できます。関連付けはファイルの場所ごとに保存されます。
+
 #### Folders
 
 | 項目 | 内容 |
@@ -411,6 +415,10 @@ In `Settings > Input`, use `Profile` to choose a slot to edit. You can change it
 Video, audio, XInput and DirectInput support, and save locations are shared across profiles. In-game saves and save state filenames stay the same when you switch profiles. To load a state, use the same player count and two- or six-button configuration as when it was saved. F5 overwrites the same file even when the current profile uses a different controller configuration.
 
 See section 5 for gamepad setup and default mappings.
+
+#### Recent games
+
+Open one of the last ten games from `Game → Recent Games`. While emulation is stopped, select an input profile and choose `Game → Assign Selected Profile to Last Game`. The next time you open that game, rxpce uses the assigned slot for that session. Choose `Game → Clear Last Game Profile` to remove the assignment. Assignments are stored by file location.
 
 #### Folders
 

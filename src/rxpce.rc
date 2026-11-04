@@ -81,6 +81,12 @@ BEGIN
     POPUP "&Game"
     BEGIN
         MENUITEM "&Open...", IDC_OPEN
+        POPUP "Recent &Games"
+        BEGIN
+            MENUITEM "(No recent games)", IDC_RECENT_GAME_EMPTY, GRAYED
+        END
+        MENUITEM "&Assign Selected Profile to Last Game", IDC_ASSIGN_GAME_PROFILE, GRAYED
+        MENUITEM "&Clear Last Game Profile", IDC_CLEAR_GAME_PROFILE, GRAYED
         MENUITEM SEPARATOR
         MENUITEM "&Save State\tF5", IDC_SAVE, GRAYED
         MENUITEM "&Load State\tF6", IDC_LOAD, GRAYED

@@ -83,6 +83,7 @@ BOOL CMainFrame::OnIdle() {
 }
 LRESULT CMainFrame::OnInitMenu(UINT, WPARAM, LPARAM, BOOL&) {
     OnIdle();
+    UpdateRecentGamesMenu();
     return 0;
 }
 LRESULT CMainFrame::OnVideoInitialize(UINT, WPARAM, LPARAM, BOOL&) {
@@ -270,6 +271,60 @@ void CMainFrame::OnOpen() {
     if (!path.empty())
         LoadMediaPath(path);
 }
+void CMainFrame::UpdateRecentGamesMenu() {
+    static_assert(IDC_RECENT_GAME_LAST - IDC_RECENT_GAME_FIRST + 1 ==
+                  rxpce_config::Settings::recent_game_count);
+    const auto menu = ::GetSubMenu(::GetSubMenu(m_menu, 0), 1);
+    if (!menu)
+        return;
+    while (::DeleteMenu(menu, 0, MF_BYPOSITION)) {}
+    const auto& recent = m_config.recent_games;
+    if (recent.empty())
+        ::AppendMenuW(menu, MF_STRING | MF_GRAYED, IDC_RECENT_GAME_EMPTY, L"(No recent games)");
+    for (std::size_t index = 0; index < recent.size(); ++index) {
+        auto path = rxpce_config::to_wide(recent[index]);
+        if (path.size() > 100)
+            path = L"..." + path.substr(path.size() - 97);
+        std::wstring label;
+        for (const auto ch : path) {
+            if (ch == L'&')
+                label += L'&';
+            label += ch;
+        }
+        ::AppendMenuW(menu, MF_STRING | (ReplayInProgress() || m_preparing ? MF_GRAYED : MF_ENABLED),
+                      IDC_RECENT_GAME_FIRST + index, label.c_str());
+    }
+    const bool can_assign = !recent.empty() && CanSelectInputProfile() && m_configWritable;
+    const bool can_clear = can_assign && rxpce_config::game_profile(
+        m_config, rxpce_paths::from_utf8(recent.front())) != 0;
+    ::EnableMenuItem(m_menu, IDC_ASSIGN_GAME_PROFILE, MF_BYCOMMAND | (can_assign ? MF_ENABLED : MF_GRAYED));
+    ::EnableMenuItem(m_menu, IDC_CLEAR_GAME_PROFILE, MF_BYCOMMAND | (can_clear ? MF_ENABLED : MF_GRAYED));
+}
+LRESULT CMainFrame::OnGameHistory(WORD, WORD id, HWND, BOOL&) {
+    try {
+        if (id <= IDC_RECENT_GAME_LAST) {
+            const auto index = static_cast<std::size_t>(id - IDC_RECENT_GAME_FIRST);
+            if (!ReplayInProgress() && !m_stopping && !rxpce_config::dialog_open &&
+                index < m_config.recent_games.size())
+                LoadMediaPath(rxpce_config::to_wide(m_config.recent_games[index]));
+        } else if ((id == IDC_ASSIGN_GAME_PROFILE || id == IDC_CLEAR_GAME_PROFILE) &&
+                   CanSelectInputProfile() && m_configWritable && !m_config.recent_games.empty()) {
+            CaptureRuntime();
+            auto candidate = m_config;
+            const int slot = id == IDC_ASSIGN_GAME_PROFILE ? candidate.selected_profile : 0;
+            rxpce_config::assign_game_profile(candidate,
+                rxpce_paths::from_utf8(candidate.recent_games.front()), slot);
+            std::string error;
+            if (rxpce_config::save(m_configPath, candidate, error))
+                m_config = std::move(candidate);
+            else
+                ShowFailure(error.c_str(), "Cannot save rxpce.json");
+        }
+    } catch (const std::exception& error) {
+        ShowFailure(error.what(), "Recent Games operation failed");
+    }
+    return 0;
+}
 bool CMainFrame::ReplayInProgress() const {
     return m_replay && (m_replay->source() || m_replay->recording());
 }
@@ -420,7 +475,8 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
     const bool rebuild_video =
         video_settings.adapter != m_config.video.adapter ||
         video_settings.palette_file != rxpce_paths::from_utf8(m_config.video.palette_file);
-    ApplySettings();
+    const auto game = playback ? std::filesystem::path{} : std::filesystem::path(path);
+    ApplySettings(game);
     m_overrides = {};
     if (rebuild_video) {
         ShutdownVideo();
@@ -432,7 +488,11 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
     SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
     rxpce_cd::queue(std::move(session));
     rxpce_host::runtime.rom_directory = std::filesystem::path(path).parent_path();
-    return StartMainLoop(std::move(playback));
+    if (!StartMainLoop(std::move(playback)))
+        return FALSE;
+    if (!game.empty())
+        rxpce_config::remember_game(m_config, game);
+    return TRUE;
 }
 BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
                             std::shared_ptr<const rxpce_replay::Recording> playback) {
@@ -449,7 +509,8 @@ BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
     const bool rebuild_video =
         video_settings.adapter != m_config.video.adapter ||
         video_settings.palette_file != rxpce_paths::from_utf8(m_config.video.palette_file);
-    ApplySettings();
+    const auto game = playback ? std::filesystem::path{} : absolute;
+    ApplySettings(game);
     m_overrides = {};
     if (rebuild_video) {
         ShutdownVideo();
@@ -464,6 +525,8 @@ BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
     rxpce_host::runtime.rom_directory = source.parent_path();
     if (!StartMainLoop(std::move(playback)))
         return FALSE;
+    if (!game.empty())
+        rxpce_config::remember_game(m_config, game);
     return TRUE;
 }
 LRESULT CMainFrame::OnCommand(WORD, WORD id, HWND, BOOL&) {
@@ -606,7 +669,7 @@ BOOL CMainFrame::LoadProfile() {
     ApplySettings();
     return TRUE;
 }
-void CMainFrame::ApplySettings() {
+void CMainFrame::ApplySettings(const std::filesystem::path& game) {
     video_settings.adapter = m_config.video.adapter;
     video_settings.zoom = m_config.video.zoom;
     video_settings.aspect_mode = m_config.video.aspect_mode;
@@ -623,6 +686,14 @@ void CMainFrame::ApplySettings() {
                                  static_cast<unsigned>(m_config.advanced.base_clock_hz),
                                  m_config.audio.cooperative_level};
     rxpce_config::active_input = m_config.input;
+    if (!game.empty()) {
+        const int slot = rxpce_config::game_profile(m_config, game);
+        if (slot && slot != m_config.selected_profile) {
+            const auto& profile = m_config.inactive_profiles[slot - 1];
+            static_cast<rxpce_config::Settings::PlayerInput&>(rxpce_config::active_input) =
+                profile ? profile->mapping : rxpce_config::Settings::PlayerInput{};
+        }
+    }
     rxpce_host::runtime.rom_directory = rxpce_paths::from_utf8(m_config.folders.rom);
     rxpce_host::runtime.state_directory = rxpce_paths::from_utf8(m_config.folders.state);
     rxpce_host::runtime.vdc_emulation = m_config.advanced.vdc_emulation;
