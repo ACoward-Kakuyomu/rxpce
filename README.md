@@ -1,8 +1,8 @@
-# rxpce 1.5.0
+# rxpce 1.5.1
 
-rxpce 1.5.0では、10個の入力プロファイルを切り替えられるようにし、CPUのメモリーアクセス時刻と、長い水平同期幅での表示崩れを改善しました。 **正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定は引き続き利用できます。
+rxpce 1.5.1では、入力リプレイ、最近使ったゲーム、ゲーム別の入力プロファイルを追加し、Releaseビルドの最適化を有効にしました。 **1.5.0のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
 
-rxpce 1.5.0 adds ten switchable input profiles, improves CPU memory access timing, and fixes rendering corruption with long horizontal sync widths. **Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
+rxpce 1.5.1 adds input replay, recent games and game-specific input profiles, and enables Release build optimization. **Save states from 1.5.0 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -18,7 +18,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.5.0の主な対応範囲は次のとおりです。
+1.5.1の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -65,9 +65,9 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.5.0の変更
+### 1.5.1の変更
 
-rxpce 1.5.0では、10個の入力プロファイルを切り替えられるようにし、CPUのメモリーアクセス時刻と、長い水平同期幅での表示崩れを改善しました。 詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
+入力リプレイ、最近使ったゲーム、ゲーム別の入力プロファイル、Releaseビルドの最適化を追加しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 **正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
@@ -98,7 +98,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.5.0 |
+| Feature | Support in 1.5.1 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -139,9 +139,9 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.5.0
+### Changes in 1.5.1
 
-rxpce 1.5.0 adds ten switchable input profiles, improves CPU memory access timing, and fixes rendering corruption with long horizontal sync widths. See the [release notes](RELEASE_NOTES.md#english) for details.
+Added input replay, recent games, game-specific input profiles and Release build optimization. See the [release notes](RELEASE_NOTES.md#english) for details.
 
 **Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
