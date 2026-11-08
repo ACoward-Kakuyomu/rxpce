@@ -1,8 +1,8 @@
-# rxpce 1.5.1
+# rxpce 1.5.2
 
-rxpce 1.5.1では、入力リプレイ、最近使ったゲーム、ゲーム別の入力プロファイルを追加し、Releaseビルドの最適化を有効にしました。 **1.5.0のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
+rxpce 1.5.2では、F9のメモリー検索とAlt+F9のチート編集を追加しました。 **1.5.0／1.5.1のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
 
-rxpce 1.5.1 adds input replay, recent games and game-specific input profiles, and enables Release build optimization. **Save states from 1.5.0 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
+rxpce 1.5.2 adds F9 memory search and Alt+F9 cheat editing. **Save states from 1.5.0 and 1.5.1 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -18,7 +18,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.5.1の主な対応範囲は次のとおりです。
+1.5.2の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -30,6 +30,7 @@ rxpceは、かつて公開されていたxpceをWindows 11向けに改修したP
 | 音声 | WASAPI／DirectSound、PSG・CD-DA・ADPCM |
 | 保存 | ゲーム内セーブ用RAM、ステート保存・復帰 |
 | メモリーツール | F9で検索、Alt+F9でチート編集。単発適用・常時適用とゲーム別JSON保存 |
+| 操作補助 | 入力プロファイル10枠とゲーム別割当、最近使ったゲーム、入力リプレイ |
 
 アーケードカード、スーパーグラフィックス、本体からの実CDドライブ再生は対象外です。ROM、BIOS、CDイメージは同梱しません。
 
@@ -59,6 +60,9 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 | --- | --- |
 | F5／F6 | ステート保存／復帰（1スロット） |
 | F8 | ウィンドウ倍率を1→2→3→4倍と切り替え |
+| F9／Alt+F9 | メモリー検索／チート編集を開く。停止画面のF9で再開 |
+| F11 | リプレイ記録の開始／終了・保存 |
+| F12 | 停止中にリプレイ再生（再生中は停止） |
 | Alt+Enter | 全画面／ウィンドウ切替（ゲーム開始後） |
 | F10 | 実行中ゲームのリセット |
 | Esc | エミュレーションを停止し、開始前の画面へ戻る |
@@ -66,9 +70,9 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.5.1の変更
+### 1.5.2の変更
 
-入力リプレイ、最近使ったゲーム、ゲーム別の入力プロファイル、Releaseビルドの最適化を追加しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
+メモリー検索、チート編集、単発・常時適用、ゲーム別JSON保存を追加しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 **正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
@@ -100,7 +104,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.5.1 |
+| Feature | Support in 1.5.2 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -110,6 +114,7 @@ See [Building](BUILDING.md#english) for source builds and the [CUE conversion he
 | Audio | WASAPI or DirectSound; PSG, CD-DA and ADPCM |
 | Saving | Game-save RAM and save states |
 | Memory tools | F9 search, Alt+F9 cheat editing, single-use and per-frame application, per-game JSON files |
+| Convenience | Ten input profiles with per-game assignments, recent games and input replay |
 
 Arcade Card, SuperGrafx and direct playback from physical CD drives are not supported by the emulator. ROMs, BIOS files and CD images are not included.
 
@@ -135,6 +140,9 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 | --- | --- |
 | F5 / F6 | Save / load the single save-state slot |
 | F8 | Cycle window scale: 1×, 2×, 3×, 4× |
+| F9 / Alt+F9 | Open memory search / cheat editing; F9 resumes from the paused window |
+| F11 | Start / finish and save replay recording |
+| F12 | Start playback while stopped, or stop active playback |
 | Alt+Enter | Toggle fullscreen after a game starts |
 | F10 | Reset the running game |
 | Esc | Stop emulation and return to the idle screen |
@@ -142,9 +150,9 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.5.1
+### Changes in 1.5.2
 
-Added input replay, recent games, game-specific input profiles and Release build optimization. See the [release notes](RELEASE_NOTES.md#english) for details.
+Added memory search, cheat editing, single-use and per-frame application, and per-game JSON files. See the [release notes](RELEASE_NOTES.md#english) for details.
 
 **Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
