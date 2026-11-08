@@ -5,6 +5,8 @@
 #include "settings.h"
 #include "unique_handle.h"
 #include "replay_session.h"
+#include "cheats_session.h"
+#include "memory_search_dialog.h"
 class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
                    public WTL::CMessageFilter,
                    public WTL::CIdleHandler {
@@ -25,6 +27,11 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_DPICHANGED, OnVideoDpiChanged)
     MESSAGE_HANDLER(WM_APP + 8, OnMainLoopExited)
     MESSAGE_HANDLER(WM_APP + 9, OnReplayFinished)
+    MESSAGE_HANDLER(WM_APP + 10, OnMemorySearchReady)
+    MESSAGE_HANDLER(WM_APP + 11, OnMemorySearchClosed)
+    MESSAGE_HANDLER(WM_APP + 12, OnCheatOperation)
+    COMMAND_ID_HANDLER(IDC_MEMORY_SEARCH, OnMemorySearch)
+    COMMAND_ID_HANDLER(IDC_MEMORY_CHEATS, OnMemorySearch)
     COMMAND_RANGE_HANDLER(IDC_EXIT, IDC_STOP, OnCommand)
     COMMAND_RANGE_HANDLER(IDC_INPUT_PROFILE_FIRST, IDC_INPUT_PROFILE_LAST, OnInputProfile)
     COMMAND_RANGE_HANDLER(IDC_REPLAY_RECORD, IDC_REPLAY_DISCARD, OnReplayCommand)
@@ -39,7 +46,15 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     bool m_configWritable = true;
     rxpce_host::UniqueHandle m_thread;
     std::unique_ptr<rxpce_replay::Session> m_replay;
+    std::unique_ptr<rxpce_cheats::Session> m_cheats;
+    std::uint64_t m_memorySearchToken = 0;
+    std::optional<std::pair<UINT, WPARAM>> m_afterMemoryTools;
     std::optional<rxpce_replay::Recording> m_pendingRecording;
+    rxpce_search::Search m_memorySearch;
+    MemorySearchDialogState m_memorySearchState;
+    std::unique_ptr<MemorySearchDialog> m_memorySearchDialog;
+    std::unique_ptr<rxpce_config::DialogInputScope> m_memorySearchInput;
+    bool m_memorySearchRequested = false;
     unsigned m_generation = 0;
     bool m_stopping = false;
     bool m_preparing = false, m_closeAfterPrepare = false;
@@ -75,6 +90,12 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     bool SavePendingReplay();
     bool CollectFinishedReplay();
     bool ReplayInProgress() const;
+    void CloseMemorySearch();
+    void DeferMemoryTools(UINT message, WPARAM command = 0);
+    LRESULT OnMemorySearch(WORD, WORD, HWND, BOOL&);
+    LRESULT OnMemorySearchReady(UINT, WPARAM, LPARAM, BOOL&);
+    LRESULT OnMemorySearchClosed(UINT, WPARAM, LPARAM, BOOL&);
+    LRESULT OnCheatOperation(UINT, WPARAM, LPARAM, BOOL&);
     void PlayReplay();
     LRESULT OnReplayCommand(WORD, WORD, HWND, BOOL&);
     LRESULT OnReplayFinished(UINT, WPARAM, LPARAM, BOOL&);

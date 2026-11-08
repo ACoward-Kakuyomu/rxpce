@@ -29,6 +29,7 @@ void ReadMixedAudio(float* output, std::size_t frames);
 std::size_t AvailableMixedAudioFrames();
 void ReportAudioOutput(bool empty, bool deferred) noexcept;
 void DiscardSoundOutput(std::uint32_t cycles);
+void SetSoundPaused(bool paused, std::uint32_t cycles);
 // Producer-thread callback; the playback thread only consumes the finished mix.
 void SetSoundExtraSource(std::function<void(float*, std::size_t, unsigned)> source);
 rxpce_audio::PsgPhaseState CaptureSoundPhase(std::uint32_t cycles);

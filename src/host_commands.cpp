@@ -7,6 +7,10 @@
 #include "pce.h"
 #include "state_service.h"
 #include "replay_session.h"
+#include "cheats_session.h"
+#include "memory_search_pause.h"
+#include "frame_timing.h"
+#include "video.h"
 #include "info.h"
 #include "log.h"
 #include <atomic>
@@ -20,9 +24,11 @@ std::atomic_bool stop_requested{false};
 }
 void RequestMachineStop() {
     stop_requested = true;
+    rxpce_search::pause_channel().cancel();
 }
 void ResetMachineStop() {
     stop_requested = false;
+    rxpce_search::pause_channel().reset();
 }
 bool IsMachineStopRequested() {
     return stop_requested.load();
@@ -33,8 +39,15 @@ rxpce_host::CommandChannel& MachineCommands() {
 }
 
 namespace rxpce_host {
-bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& replay) {
+bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& replay,
+                      rxpce_cheats::Session& cheats) {
     auto commands = MachineCommands().take();
+    if ((commands & EV_REPLAY_RECORD) && cheats.freezes()) {
+        commands &= ~EV_REPLAY_RECORD;
+        SetInfoString("Disable Always Apply cheats before recording a replay");
+        LogDumpDetail("Replay recording rejected: Always Apply cheats are enabled\n");
+    }
+    cheats.boundary(IsMachineStopRequested() || (commands & (EV_LOAD | EV_RESET)) != 0);
     const bool was_recording = replay.recording();
     if (!replay.boundary(machine, (commands & EV_REPLAY_RECORD) != 0, IsMachineStopRequested()))
         return false;
@@ -44,6 +57,8 @@ bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& re
         SaveState();
     if (commands & EV_LOAD)
         LoadState();
+    if (commands & (EV_LOAD | EV_RESET))
+        rxpce_search::pause_channel().invalidate();
     bool changed = false;
     if (commands & EV_DOWNSKIPRATE) {
         if (rxpce_host::runtime.frame_skip > 0)
@@ -73,6 +88,28 @@ bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& re
     if (commands & EV_RESET) {
         ResetInput();
         ResetPCE(&machine.cpu);
+    }
+    const bool can_search = !was_recording && !replay.recording() && !replay.source();
+    if ((commands & EV_MEMORY_SEARCH) && !can_search)
+        PostMessage(hwnd, WM_APP + 10, 0, 0);
+    if ((commands & EV_MEMORY_SEARCH) && can_search &&
+        !IsMachineStopRequested()) {
+        auto context = cheats.capture(machine);
+#ifdef SOUND
+        SetSoundPaused(true, machine.cpu.cycles());
+#endif
+        rxpce_search::pause_channel().wait(std::move(context), [] {
+            return PostMessage(hwnd, WM_APP + 10, 0, 0) != FALSE;
+        }, [&](const rxpce_search::Pause::Request& request) {
+            return cheats.process(machine, request);
+        }, [] {
+            return PostMessage(hwnd, WM_APP + 12, 0, 0) != FALSE;
+        });
+#ifdef SOUND
+        SetSoundPaused(false, machine.cpu.cycles());
+#endif
+        ResetInput();
+        ResetFrameTiming();
     }
     return !IsMachineStopRequested();
 }

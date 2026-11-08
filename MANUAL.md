@@ -54,6 +54,8 @@ CUE版とCHD版のステートは共有できません。CHDで問題が出る�
 | Game → Open... | — | イメージを選択して開始 |
 | Game → Save State | F5 | 現在の状態を保存。既存スロットを上書き |
 | Game → Load State | F6 | 保存済み状態へ復帰 |
+| Game → Memory Search | F9 | RAMを取得して一時停止。検索画面のF9で再開 |
+| Game → Cheat Editor | Alt+F9 | 一時停止し、チート編集タブを開く |
 | Game → Reset | F10 | 実行中ゲームをリセット |
 | Game → Stop Emulation | Esc | 停止し、開始前の黒い画面へ戻る |
 | Game → Exit | Alt+F4 | アプリケーション終了 |
@@ -76,6 +78,36 @@ F8は開始前でも使えますが、全画面中は無効です。保存・復
 メニューは`Alt+G`でGame、`Alt+V`でViewを開けます。開いたメニュー内では下線付きの文字で項目を選べます。表示される下線はWindowsの設定やAltキーの状態によって変わります。
 
 F10は現在のゲームをリセットする操作です。別のイメージを開いたり、設定の未適用項目を適用し直す操作ではありません。設定を適用するにはEscで停止してからゲームを開き直してください。
+
+#### メモリー検索・チート編集
+
+`Game → Memory Search` はゲーム中のRAMを検索する機能です。F9で一時停止して取得し、`Resume (F9)`、F9、または検索画面を閉じて再開します。リプレイの記録・再生中は利用できません。
+
+`Size` は1・2・4バイト、符号なし・リトルエンディアンで、値全体が領域内に収まる全位置を調べます。`Value` は10進数または `0x` 付き16進数です。`Filter` で値一致、直前F9から不変・変化・増加・減少を条件に候補を減らせます。次のF9まで比較元は変わりません。`New Search` またはサイズ変更で候補を全件に戻します。初回は前回との比較を利用できません。
+
+一覧の現在値と前回値は `255 (0xFF)` のように10進数と16進数で併記します。16進数はサイズに合わせて2・4・8桁で表示します。
+
+候補は停止・再開を挟んでも保持します。ゲームの開き直し、リセット、ステート読込みで破棄します。対象は本体・バックアップRAMと搭載された拡張RAMで、表示するアドレスは領域内のオフセットです。Searchタブでは書き換えません。
+
+Alt+F9または `Game → Cheat Editor` で、同じ停止画面のCheatsタブを開きます。停止中のAlt+F9はCheatsタブへ移り、F9はどちらのタブからも再開します。検索候補のダブルクリックでもチートを登録できます。初期状態は無効な単発コードです。同じ領域・オフセット・バイト数の行があれば、その行を選び、既存の値を上書きしません。
+
+| 項目 | 意味 |
+| --- | --- |
+| Name | 用途を示す1〜64文字の名前 |
+| Enabled | 適用を有効にする。外しても定義は保持 |
+| Region / Offset | 書込み先のRAM領域と、その先頭からのバイト位置 |
+| Bytes / Value | 1・2・4バイトの符号なし値。10進数または0x付き16進数で入力 |
+| Always Apply | 有効なコードをエミュレーターの各フレーム境界で適用 |
+
+一覧の選択で入力欄へ転送し、`Add` で追加、`Update` で選択行を更新、`Delete` で削除します。CheatsタブのEnterは未選択時にAdd、選択済みならUpdateで、RAMへ直接適用しません。書込み先はMain RAMと搭載されたCD RAM／Super CD RAMです。Backup RAMと特殊HuCardの永続RAMは検索専用です。領域端を越える値は指定できず、有効な常時適用コード同士の範囲重複は保存できません。
+
+`Apply` は選択した有効な単発コード（Always Applyがオフ）を、停止したまま一度だけ適用します。入力欄の変更は先にAdd／Updateで一覧へ反映してください。ファイルに未保存の行も適用できます。現在値は更新されますが、検索候補と前回F9の比較元は維持します。次回F9も取得時点の値を比較元とするため、Applyによる変化を抽出できます。
+
+`Save Cheats` は一覧全体を保存し、実行用の定義を確定します。保存自体ではRAMを変更せず、常時適用は再開後のフレーム境界から始まります。入力欄や一覧の未保存変更を残して移動・再開・終了する場合は、保存／破棄／取消を選べます。**定義を破棄しても、Applyで変更済みのRAMは元に戻りません。** 保存失敗時は元ファイルと実行用定義を保持し、編集を残します。
+
+定義はイメージと同じフォルダーのUTF-8 JSON（例：`game.pce.cheats.json`、`game.zip.cheats.json`、`game.cue.cheats.json`）へ保存し、次回そのゲームを通常起動すると読み込みます。ZIPは外側の名前を使い、CUEとCHDは個別、AccurateとFastは共用です。ROM／ディスクとCDのBIOSの識別値を照合します。不正なファイルは通知して適用を無効にし、原本は保持します。置換にはSave Cheatsの明示的な確認が必要です。
+
+チート定義はステートに含めません。ステート復帰・リセット後も現在の常時適用設定を保持し、次のフレーム境界から適用します。有効な常時適用コードがある間はリプレイを記録できません。単発適用後のRAMは記録開始状態へ入り、リプレイ再生では外部チートを読み込み・適用しません。
 
 ### 4. 既定のキーボード操作
 
@@ -217,6 +249,7 @@ HuCardまたはCDのプレイ中にF11で記録を開始し、もう一度F11を
 | CHDのステート | 実行状態 | `Example.chd` → `Example.chd.st0` |
 | Fastのステート | 速度優先モードの実行状態 | `.st0`の代わりに`.fst0`。CHDは`Example.chd.fst0` |
 | Populous RAM | カートリッジRAM（32 KiB） | `Example.pce`／`Example.zip` → `Example.ram` |
+| チート定義 | ゲームごとの有効状態・名前・書込み条件 | イメージの完全な名前 + `.cheats.json`。状態保存先設定に関係なくイメージの隣 |
 | rxpce.log／rxpce.log.bak | 診断ログ／前回のログ | 実行ファイルの隣 |
 
 ステートと`.ram`の保存先は`State / RAM folder`に従います。ZIPの保存名はZIP自体の名前を使い、内部PCEの名前は使いません。同じ保存先に同じベース名のPCE/ZIP/CUEを置くとステート名が重複するため、別のフォルダーや名前を使ってください。CUEとCHDは保存名も識別も別で、相互復帰はできません。
@@ -237,7 +270,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 特殊描画モード・VRAM書込み規則・行内パレット反映と復帰表示の改善でも、Accurate/FastそれぞれのHuCard/CD形式GUIDを更新しています。この変更前のステートは読み込めないため、更新後はゲームを新規起動してステートを作成してください。
 
-更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.fst0`／`.ram`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
+更新前にはアプリを終了し、`rxpce.json`、`backup.dat`、ゲームごとの`.st0`／`.fst0`／`.ram`／`.cheats.json`をバックアップします。実行ファイルを別フォルダーへ移すと、設定と共通バックアップRAMを探す場所も変わります。
 
 設定だけを初期化する場合は、終了後に`rxpce.json`を別名で退避して起動します。正常終了時に新しい設定ファイルを保存します。ゲーム内セーブを残す場合は`backup.dat`や`.ram`を削除しないでください。旧`xpce.ini`／`xpce.json`は自動読込みしません。
 
@@ -309,6 +342,8 @@ CUE and CHD states cannot be exchanged. If a CHD fails while the original CUE wo
 | Game → Open... | — | Select an image and start |
 | Game → Save State | F5 | Save the current state, overwriting the slot |
 | Game → Load State | F6 | Restore the saved state |
+| Game → Memory Search | F9 | Capture RAM and pause; press F9 in the search window to resume |
+| Game → Cheat Editor | Alt+F9 | Pause and open the Cheats tab |
 | Game → Reset | F10 | Reset the running game |
 | Game → Stop Emulation | Esc | Stop and return to the idle black screen |
 | Game → Exit | Alt+F4 | Quit |
@@ -331,6 +366,36 @@ F8 works before a game starts, but is disabled in fullscreen. Saving, loading, r
 Use `Alt+G` for Game and `Alt+V` for View, then an underlined menu letter to select an item. Windows controls when underlines are shown.
 
 F10 resets the current game. It does not open another image or apply pending settings. Press Esc and reopen the image to apply those settings.
+
+#### Memory Search and Cheats
+
+`Game → Memory Search` captures physical RAM and pauses emulation. Press F9, click `Resume (F9)` or close the search window to resume. Search is unavailable during replay recording or playback.
+
+Choose a `Size` of 1, 2 or 4 bytes. Values are unsigned, little-endian, and may start at any offset where the whole value fits within one region. Enter `Value` in decimal or hexadecimal with a `0x` prefix. `Filter` narrows candidates by exact value, or by values that are unchanged, changed, increased or decreased since the previous F9 capture. Comparisons keep that baseline throughout the pause. `New Search` or changing the size restores all candidates. Previous-value comparisons become available after the second capture.
+
+Current and previous values display both decimal and hexadecimal, such as `255 (0xFF)`. Hexadecimal values use 2, 4 or 8 digits to match the selected size.
+
+Candidates survive pause and resume. Opening a game, resetting or loading a save state clears the search. Regions include main RAM, backup RAM and installed expansion RAM. Addresses are offsets within each region. The Search tab does not write memory.
+
+Alt+F9 or `Game → Cheat Editor` opens the Cheats tab in the same paused window. While paused, Alt+F9 selects Cheats, and F9 resumes from either tab. Double-click a writable search result to register a disabled, single-use code. If a row with the same region, offset and byte size exists, it is selected without overwriting its value.
+
+| Field | Meaning |
+| --- | --- |
+| Name | A descriptive name of 1–64 characters |
+| Enabled | Enable application; disabling retains the definition |
+| Region / Offset | Physical RAM region and byte offset within it |
+| Bytes / Value | An unsigned 1-, 2- or 4-byte value, entered in decimal or 0x hexadecimal |
+| Always Apply | Apply an enabled code at each emulated frame boundary |
+
+Select a row to copy it into the fields. `Add`, `Update` and `Delete` edit the list. In Cheats, Enter adds a new row when none is selected, or updates the selected row; it does not apply RAM changes. Writable regions are Main RAM and installed CD RAM / Super CD RAM. Backup RAM and persistent HuCard RAM support search only. Values must fit within a region. Enabled Always Apply codes cannot overlap when saving.
+
+`Apply` writes the selected enabled single-use code (Always Apply off) once while emulation remains paused. First use Add / Update to commit field edits to the list. Unsaved rows can be applied. Current values refresh while candidates and the previous F9 baseline remain unchanged. The next F9 also compares against values at capture time, so changes made by Apply can be found.
+
+`Save Cheats` saves the whole list and commits the runtime definitions. Saving does not write RAM; Always Apply starts at the next frame boundary after resuming. Uncommitted fields and unsaved definitions prompt to keep/save, discard or cancel when leaving. **Discarding a definition does not undo RAM already changed by Apply.** A failed save preserves the previous file, runtime definitions and editable changes.
+
+Definitions use a UTF-8 JSON file beside the image, such as `game.pce.cheats.json`, `game.zip.cheats.json` or `game.cue.cheats.json`, and load on normal game startup. ZIP uses the outer filename. CUE and CHD stay separate; Accurate and Fast share definitions. ROM/disc and CD BIOS identities must match. An invalid file disables application and is preserved; replacing it requires explicit Save Cheats confirmation.
+
+Definitions are external to save states. Loading a state or resetting retains the current Always Apply settings and resumes application at the following frame boundary. Replay recording is unavailable while any Always Apply code is enabled. RAM modified by a single-use code enters the recording's start state. Playback does not load or apply external cheats.
 
 ### 4. Default keyboard controls
 
@@ -472,6 +537,7 @@ There is **one save-state slot per VDC mode**. F5 overwrites it; F6 restores it.
 | CHD state | Emulation state | `Example.chd` → `Example.chd.st0` |
 | Fast state | Speed-priority emulation state | Uses `.fst0` instead of `.st0`; CHD uses `Example.chd.fst0` |
 | Populous RAM | 32 KiB cartridge RAM | `Example.pce` / `Example.zip` → `Example.ram` |
+| Cheat definitions | Per-game names, enablement and write conditions | Full image filename + `.cheats.json`, beside the image regardless of the state directory setting |
 | rxpce.log / rxpce.log.bak | Diagnostic / previous log | Beside the executable |
 
 States and `.ram` files follow `State / RAM folder`. ZIP saves use the ZIP's name, not its internal PCE name. PCE/ZIP/CUE files with the same base name and save folder share a state filename; use distinct names or folders. CUE and CHD have different state names and identities and cannot exchange states.
@@ -492,7 +558,7 @@ Save states support resumable block transfers and HuCard PSG phase restoration. 
 
 Special rendering modes, VRAM write rules, palette timing and restored presentation changes also update the HuCard/CD format GUIDs for both Accurate and Fast. States made before this change cannot be loaded; start the game normally and create new states after updating.
 
-Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram`. Moving the executable changes where it looks for settings and shared backup RAM.
+Before updating, close the application and back up `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram`/`.cheats.json`. Moving the executable changes where it looks for settings and shared backup RAM.
 
 To reset settings only, close the app, rename `rxpce.json` as a backup and restart. New settings are saved on normal exit. Keep `backup.dat` and `.ram` files if you want to retain game saves. Old `xpce.ini`/`xpce.json` files are not imported automatically.
 

@@ -12,6 +12,7 @@
 #include "machine_commands.h"
 #include "host_runtime.h"
 #include "host_settings.h"
+#include "memory_search_pause.h"
 #include <shellapi.h>
 #include <cwctype>
 #include <stdexcept>
@@ -61,6 +62,10 @@ LRESULT CMainFrame::OnCreate(UINT, WPARAM, LPARAM, BOOL&) {
 BOOL CMainFrame::OnIdle() {
     const bool ready = MachineCommands().ready();
     const bool replay_busy = ReplayInProgress();
+    ::EnableMenuItem(m_menu, IDC_MEMORY_SEARCH, MF_BYCOMMAND |
+        (ready && !replay_busy && !m_memorySearchRequested && !m_memorySearchDialog ? MF_ENABLED : MF_GRAYED));
+    ::EnableMenuItem(m_menu, IDC_MEMORY_CHEATS, MF_BYCOMMAND |
+        (ready && !replay_busy && !m_memorySearchRequested && !m_memorySearchDialog ? MF_ENABLED : MF_GRAYED));
     for (const UINT id : {IDC_FULLSCREEN, IDC_STOP})
         ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (ready ? MF_ENABLED : MF_GRAYED));
     for (const UINT id : {IDC_RESET, IDC_SAVE, IDC_LOAD})
@@ -68,7 +73,8 @@ BOOL CMainFrame::OnIdle() {
     ::EnableMenuItem(m_menu, IDC_OPEN, MF_BYCOMMAND | (replay_busy ? MF_GRAYED : MF_ENABLED));
     const bool playback = m_replay && m_replay->source();
     ::EnableMenuItem(m_menu, IDC_REPLAY_RECORD,
-                     MF_BYCOMMAND | (ready && !playback && !m_pendingRecording ? MF_ENABLED : MF_GRAYED));
+                     MF_BYCOMMAND | (ready && !playback && !m_pendingRecording &&
+                         (!m_cheats || !m_cheats->freezes()) ? MF_ENABLED : MF_GRAYED));
     ::EnableMenuItem(m_menu, IDC_REPLAY_PLAY,
                      MF_BYCOMMAND | ((!m_thread || playback) ? MF_ENABLED : MF_GRAYED));
     for (const UINT id : {IDC_REPLAY_SAVE, IDC_REPLAY_DISCARD})
@@ -119,7 +125,7 @@ unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
         if (FAILED(apartment.status))
             throw std::runtime_error("Cannot initialize emulation thread COM apartment");
         result = rxpce_host::RunEmulation(rxpce_paths::executable().parent_path() / L"backup.dat",
-                                         start->frame->m_replay.get());
+                                         start->frame->m_replay.get(), start->frame->m_cheats.get());
     } catch (const std::exception& error) {
         LogDump("Emulation start failed: %s\n", error.what());
     }
@@ -127,6 +133,9 @@ unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
     return result;
 }
 BOOL CMainFrame::StartMainLoop(std::shared_ptr<const rxpce_replay::Recording> playback) {
+    m_memorySearch = {};
+    m_memorySearchState = {};
+    m_memorySearchRequested = false;
     ResetMachineStop();
     if (!MachineCommands().initialize()) {
         PostMessage(WM_CLOSE);
@@ -135,6 +144,7 @@ BOOL CMainFrame::StartMainLoop(std::shared_ptr<const rxpce_replay::Recording> pl
     std::unique_ptr<WorkerStart> start;
     try {
         start = std::make_unique<WorkerStart>(WorkerStart{this, ++m_generation});
+        m_cheats = std::make_unique<rxpce_cheats::Session>();
         m_replay = std::make_unique<rxpce_replay::Session>(
             std::move(playback), [window = m_hWnd, generation = m_generation] {
                 ::PostMessage(window, WM_APP + 9, generation, 0);
@@ -160,16 +170,22 @@ void CMainFrame::StopMainLoop() {
         m_stopping = true;
         LogDumpDetail("Stopping emulation worker\n");
         RequestMachineStop();
+        CloseMemorySearch();
         rxpce_ui::wait_for_thread(m_thread.get());
         LogDumpDetail("Emulation worker stopped\n");
         m_thread.reset();
         CollectFinishedReplay();
         m_replay.reset();
+        m_cheats.reset();
         m_stopping = false;
     }
     MachineCommands().reset();
 }
 LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
+    if (m_memorySearchDialog && m_memorySearchDialog->IsWindow()) {
+        DeferMemoryTools(WM_CLOSE);
+        return 0;
+    }
     if (m_preparing) {
         m_cancelPrepare = true;
         m_closeAfterPrepare = true;
@@ -301,6 +317,10 @@ void CMainFrame::UpdateRecentGamesMenu() {
     ::EnableMenuItem(m_menu, IDC_CLEAR_GAME_PROFILE, MF_BYCOMMAND | (can_clear ? MF_ENABLED : MF_GRAYED));
 }
 LRESULT CMainFrame::OnGameHistory(WORD, WORD id, HWND, BOOL&) {
+    if (m_memorySearchDialog && m_memorySearchDialog->IsWindow()) {
+        DeferMemoryTools(WM_COMMAND, id);
+        return 0;
+    }
     try {
         if (id <= IDC_RECENT_GAME_LAST) {
             const auto index = static_cast<std::size_t>(id - IDC_RECENT_GAME_FIRST);
@@ -327,6 +347,100 @@ LRESULT CMainFrame::OnGameHistory(WORD, WORD id, HWND, BOOL&) {
 }
 bool CMainFrame::ReplayInProgress() const {
     return m_replay && (m_replay->source() || m_replay->recording());
+}
+LRESULT CMainFrame::OnMemorySearch(WORD, WORD id, HWND, BOOL&) {
+    if (MachineCommands().ready() && !ReplayInProgress() && !m_memorySearchRequested &&
+        !m_memorySearchDialog && !m_stopping && !m_preparing && !rxpce_config::dialog_open) {
+        m_memorySearchRequested = true;
+        m_memorySearchState.tab = id == IDC_MEMORY_CHEATS ? 1 : 0;
+        MachineCommands().post(EV_MEMORY_SEARCH);
+    }
+    return 0;
+}
+LRESULT CMainFrame::OnMemorySearchReady(UINT, WPARAM, LPARAM, BOOL&) {
+    auto snapshot = rxpce_search::pause_channel().take();
+    if (!snapshot) {
+        m_memorySearchRequested = false;
+        return 0;
+    }
+    try {
+        m_memorySearch.capture(std::move(snapshot->snapshot));
+        m_memorySearchToken = snapshot->token;
+        m_memorySearchState.editor.reset(std::move(snapshot->document));
+        m_memorySearchState.overwrite_confirmation = snapshot->overwrite_confirmation;
+        m_memorySearchState.warning = std::move(snapshot->warning);
+        m_memorySearchInput = std::make_unique<rxpce_config::DialogInputScope>();
+        CheatActions actions;
+        actions.cancel_close = [this] { m_afterMemoryTools.reset(); };
+        const auto token = m_memorySearchToken;
+        actions.save = [token](const rxpce_cheats::Document& document) {
+            rxpce_search::Pause::Request request;
+            request.token = token;
+            request.kind = rxpce_search::Pause::Request::Kind::save;
+            request.document = document;
+            if (!rxpce_search::pause_channel().request(std::move(request)))
+                throw std::runtime_error("Paused game is no longer available");
+        };
+        actions.apply = [token](const rxpce_cheats::Entry& entry) {
+            rxpce_search::Pause::Request request;
+            request.token = token;
+            request.entry = entry;
+            if (!rxpce_search::pause_channel().request(std::move(request)))
+                throw std::runtime_error("Paused game is no longer available");
+        };
+        m_memorySearchDialog = std::make_unique<MemorySearchDialog>(m_memorySearch, m_memorySearchState, std::move(actions));
+        const auto dialog = m_memorySearchDialog->Create(m_hWnd);
+        if (!dialog || !::IsWindow(dialog))
+            throw std::runtime_error("Cannot create Memory Search window");
+        EnableWindow(FALSE);
+        ::ShowWindow(dialog, SW_SHOW);
+        ::SetForegroundWindow(dialog);
+        LogDumpDetail("Memory Search paused: candidates=%zu\n", m_memorySearch.candidates().size());
+    } catch (const std::exception& error) {
+        CloseMemorySearch();
+        ShowFailure(error.what(), "Memory Search");
+    }
+    return 0;
+}
+void CMainFrame::CloseMemorySearch() {
+    m_memorySearchToken = 0;
+    m_afterMemoryTools.reset();
+    const bool had_dialog = bool(m_memorySearchDialog);
+    if (m_memorySearchDialog && m_memorySearchDialog->IsWindow())
+        m_memorySearchDialog->DestroyWindow();
+    m_memorySearchDialog.reset();
+    m_memorySearchInput.reset();
+    m_memorySearchRequested = false;
+    if (had_dialog)
+        EnableWindow(TRUE);
+    rxpce_search::pause_channel().resume();
+}
+LRESULT CMainFrame::OnCheatOperation(UINT, WPARAM, LPARAM, BOOL&) {
+    auto reply = rxpce_search::pause_channel().take_reply();
+    if (reply && reply->token == m_memorySearchToken && m_memorySearchDialog && m_memorySearchDialog->IsWindow())
+        m_memorySearchDialog->CompleteOperation(std::move(reply->snapshot), reply->saved, reply->error);
+    return 0;
+}
+void CMainFrame::DeferMemoryTools(UINT message, WPARAM command) {
+    if (m_afterMemoryTools) return;
+    m_afterMemoryTools = std::make_pair(message, command);
+    m_memorySearchDialog->SendMessage(WM_CLOSE);
+}
+LRESULT CMainFrame::OnMemorySearchClosed(UINT, WPARAM, LPARAM, BOOL&) {
+    // A notification from an already destroyed dialog must not close a new one.
+    if (m_memorySearchDialog && !m_memorySearchDialog->IsWindow()) {
+        const auto after = m_afterMemoryTools;
+        if (after && (after->first == WM_CLOSE || after->second == IDC_STOP || after->second == IDC_EXIT))
+            RequestMachineStop();
+        CloseMemorySearch();
+        ::SetForegroundWindow(m_hWnd);
+        SetFocus();
+        m_videoShortcuts.reset();
+        RefreshCursor();
+        LogDumpDetail("Memory Search resumed\n");
+        if (after) PostMessage(after->first, after->second);
+    }
+    return 0;
 }
 std::wstring CMainFrame::ChooseReplayPath(bool save) {
     std::vector<wchar_t> filename(32768);
@@ -396,12 +510,14 @@ void CMainFrame::PlayReplay() {
         LoadMediaPath(media, std::move(recording));
 }
 LRESULT CMainFrame::OnReplayCommand(WORD, WORD id, HWND, BOOL&) {
+    if (m_memorySearchDialog && m_memorySearchDialog->IsWindow()) return 0;
     if (m_preparing || m_stopping || rxpce_config::dialog_open)
         return 0;
     try {
         if (id == IDC_REPLAY_PLAY)
             PlayReplay();
-        else if (id == IDC_REPLAY_RECORD && m_replay && !m_replay->source() && !m_pendingRecording)
+        else if (id == IDC_REPLAY_RECORD && m_replay && !m_replay->source() && !m_pendingRecording &&
+                 (!m_cheats || !m_cheats->freezes()))
             MachineCommands().post(EV_REPLAY_RECORD);
         else if (id == IDC_REPLAY_SAVE)
             SavePendingReplay();
@@ -530,6 +646,10 @@ BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
     return TRUE;
 }
 LRESULT CMainFrame::OnCommand(WORD, WORD id, HWND, BOOL&) {
+    if (m_memorySearchDialog && m_memorySearchDialog->IsWindow()) {
+        if (id == IDC_OPEN || id == IDC_STOP || id == IDC_EXIT) DeferMemoryTools(WM_COMMAND, id);
+        return 0;
+    }
     try {
 
         if (m_preparing)
@@ -600,6 +720,8 @@ LRESULT CMainFrame::OnVideoDpiChanged(UINT, WPARAM, LPARAM position, BOOL&) {
     return 0;
 }
 BOOL CMainFrame::PreTranslateMessage(MSG* message) {
+    if (m_memorySearchDialog && m_memorySearchDialog->IsWindow())
+        return m_memorySearchDialog->ProcessMessage(message);
     if (rxpce_config::dialog_open || m_preparing || m_stopping)
         return FALSE;
     const auto result = m_videoShortcuts.process(message->message, message->wParam, message->lParam,
@@ -615,6 +737,10 @@ BOOL CMainFrame::PreTranslateMessage(MSG* message) {
     }
     auto& keyboard = rxpce_input::keyboard_state();
     keyboard.event(message->message, static_cast<unsigned>(message->wParam), message->lParam);
+    if (result.command == rxpce_video::ShortcutCommand::memory_search)
+        SendMessage(WM_COMMAND, IDC_MEMORY_SEARCH);
+    if (result.command == rxpce_video::ShortcutCommand::edit_cheats)
+        SendMessage(WM_COMMAND, IDC_MEMORY_CHEATS);
     if (message->wParam == VK_SHIFT || message->wParam == VK_CONTROL ||
         message->wParam == VK_MENU) {
         const auto scan = static_cast<UINT>((message->lParam >> 16) & 255) |

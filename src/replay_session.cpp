@@ -14,14 +14,6 @@ std::uint64_t time_at_boundary(const rxpce_machine::Machine& machine) {
     clock.advance_to(machine.cpu.cpu.elapsed);
     return clock.state().master_time;
 }
-MediaIdentity current_media(const rxpce_machine::Machine& machine) {
-    if (machine.cd_session) {
-        const auto& cd = *machine.cd_session;
-        return identify_cd(cd.source, cd.disc.identity(), cd.bios.profile.rom_sha256);
-    }
-    const auto& rom = machine.rom_bytes();
-    return identify_hucard(rom.data(), rom.size());
-}
 } // namespace
 bool Session::begin_playback(rxpce_machine::Machine& machine) {
     if (!source_)

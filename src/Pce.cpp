@@ -1,4 +1,5 @@
 #include "replay_session.h"
+#include "cheats_session.h"
 /*
 	Portable PC-Engine Emulator
 	1998 by BERO bero@geocities.co.jp
@@ -419,9 +420,15 @@ static int InitPCE(const std::filesystem::path& backmemname, bool replaying) {
     return 0;
 }
 
-static int RunPCE(rxpce_replay::Session& replay) {
+static int RunPCE(rxpce_replay::Session& replay, rxpce_cheats::Session& cheats) {
     auto& machine = CurrentMachine();
     ResetPCE(&machine.cpu);
+    cheats.start(machine, replay.source() != nullptr);
+    const auto& cheat_warning = cheats.warning();
+    if (!cheat_warning.empty()) {
+        LogDump("Cheats disabled: %s\n", cheat_warning.c_str());
+        SetInfoString("Cheat file could not be loaded; cheats disabled");
+    }
     if (!replay.source() && !machine.backup_writable)
         SetInfoString("Can't load backup.dat; existing file will be preserved");
     if (!machine.ram_path.empty() && !machine.cartridge_ram_writable)
@@ -436,7 +443,8 @@ static int RunPCE(rxpce_replay::Session& replay) {
     struct Context {
         Machine& machine;
         rxpce_replay::Session& replay;
-    } context{machine, replay};
+        rxpce_cheats::Session& cheats;
+    } context{machine, replay, cheats};
     PceCpuHost host{
         machine.bus(),
         [](void* p) {
@@ -477,7 +485,8 @@ static int RunPCE(rxpce_replay::Session& replay) {
         if (!machine.frame_boundary_pending)
             return !IsMachineStopRequested() || static_cast<Context*>(context)->replay.recording();
         machine.frame_boundary_pending = false;
-        return rxpce_host::PollHostCommands(machine, static_cast<Context*>(context)->replay);
+        auto& host = *static_cast<Context*>(context);
+        return rxpce_host::PollHostCommands(machine, host.replay, host.cheats);
     };
     LogDumpDetail("CPU core=MCS6502+HuC6280\n");
     if (RunPceCpu(machine.cpu, host) == PceCpuResult::invalid_instruction) {
@@ -521,9 +530,11 @@ static void TrashPCE(const std::filesystem::path& backmemname, bool replaying) {
 }
 
 int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
-                            rxpce_replay::Session* session) {
+                            rxpce_replay::Session* session, rxpce_cheats::Session* cheats_session) {
     rxpce_replay::Session normal;
     auto& replay = session ? *session : normal;
+    rxpce_cheats::Session normal_cheats;
+    auto& cheats = cheats_session ? *cheats_session : normal_cheats;
     const auto* source = replay.source();
     int result = -1;
     bool core_started = false;
@@ -548,7 +559,7 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
             core_started = true;
             if (InitPCE(backup_file, source != nullptr) == 0) {
                 SetInfoString("Emulation started");
-                result = RunPCE(replay) ? 0 : -1;
+                result = RunPCE(replay, cheats) ? 0 : -1;
             }
         }
     } catch (const std::exception& error) {

@@ -29,6 +29,7 @@ rxpceは、かつて公開されていたxpceをWindows 11向けに改修したP
 | 表示 | Direct3D 11、Square Pixels（整数倍）／TV (4:3)、補間なし、ウィンドウ／ボーダーレス全画面 |
 | 音声 | WASAPI／DirectSound、PSG・CD-DA・ADPCM |
 | 保存 | ゲーム内セーブ用RAM、ステート保存・復帰 |
+| メモリーツール | F9で検索、Alt+F9でチート編集。単発適用・常時適用とゲーム別JSON保存 |
 
 アーケードカード、スーパーグラフィックス、本体からの実CDドライブ再生は対象外です。ROM、BIOS、CDイメージは同梱しません。
 
@@ -76,7 +77,8 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 * `rxpce.json`は設定、実行ファイルと同じフォルダーの`backup.dat`は全ゲーム共通の2 KiBバックアップRAMです。
 * ステートとPopulousの`.ram`は、初期設定ではゲームイメージの隣に保存します。保存名・保存先は[操作説明書](MANUAL.md)に記載しています。
 * **ステート復帰はゲーム内セーブ用RAMも巻き戻します。** 最新のゲーム内セーブを残す場合は、先に正常終了して保存ファイルをバックアップしてください。
-* 更新・移動前にはアプリを終了し、`rxpce.json`、`backup.dat`、各ゲームの`.st0`／`.fst0`／`.ram`をコピーして保管してください。
+* チート定義はイメージの完全なファイル名に`.cheats.json`を付け、イメージの隣に保存します。
+* 更新・移動前にはアプリを終了し、`rxpce.json`、`backup.dat`、各ゲームの`.st0`／`.fst0`／`.ram`／`.cheats.json`をコピーして保管してください。
 
 ### 著作者・第三者ソフトウェア
 
@@ -107,6 +109,7 @@ See [Building](BUILDING.md#english) for source builds and the [CUE conversion he
 | Video | Direct3D 11, Square Pixels (integer scaling) / TV (4:3), nearest-neighbor sampling, windowed and borderless fullscreen |
 | Audio | WASAPI or DirectSound; PSG, CD-DA and ADPCM |
 | Saving | Game-save RAM and save states |
+| Memory tools | F9 search, Alt+F9 cheat editing, single-use and per-frame application, per-game JSON files |
 
 Arcade Card, SuperGrafx and direct playback from physical CD drives are not supported by the emulator. ROMs, BIOS files and CD images are not included.
 
@@ -149,7 +152,9 @@ Added input replay, recent games, game-specific input profiles and Release build
 
 `rxpce.json` contains settings. `backup.dat`, beside the executable, is the shared 2 KiB backup RAM. Save states and Populous `.ram` files are stored beside the game image by default; see the [manual](MANUAL.md#english) for naming and locations.
 
-**Loading a state also rolls back game-save RAM.** To preserve newer game saves, exit normally and back up the save files first. Before updating or moving the application, close it and copy `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram` files to a safe location.
+Cheat definitions are saved beside the image using its full filename plus `.cheats.json`.
+
+**Loading a state also rolls back game-save RAM.** To preserve newer game saves, exit normally and back up the save files first. Before updating or moving the application, close it and copy `rxpce.json`, `backup.dat` and each game's `.st0`/`.fst0`/`.ram`/`.cheats.json` files to a safe location.
 
 ### Credits and third-party software
 

@@ -40,9 +40,16 @@ target_compile_features(cartridge PUBLIC cxx_std_17)
 target_include_directories(cartridge PUBLIC src)
 target_compile_definitions(cartridge PRIVATE _WIN32_WINNT=0x0A00)
 target_link_libraries(cartridge PRIVATE bcrypt chdr-static)
-add_library(machine_core STATIC src/machine.cpp src/vdc_render.cpp src/machine_devices.cpp src/machine_snapshot.cpp src/machine_vdc.cpp)
+add_library(machine_core STATIC src/machine.cpp src/vdc_render.cpp src/machine_devices.cpp src/machine_snapshot.cpp src/machine_vdc.cpp src/memory_search.cpp src/memory_search_capture.cpp)
 target_link_libraries(machine_core PUBLIC cartridge pce_cpu machine_state vdc_dma video_clock)
 target_compile_options(machine_core PRIVATE /utf-8)
+add_library(media_identity STATIC src/replay_media.cpp src/machine_media.cpp)
+target_include_directories(media_identity PUBLIC src)
+target_link_libraries(media_identity PUBLIC machine_core)
+add_library(cheats STATIC src/cheats.cpp src/cheats_file.cpp src/cheats_editor.cpp src/cheats_memory.cpp src/cheats_session.cpp)
+target_include_directories(cheats PUBLIC src)
+target_include_directories(cheats SYSTEM PRIVATE third-party/picojson)
+target_link_libraries(cheats PUBLIC machine_core media_identity)
 add_library(host_paths STATIC src/file_paths.cpp)
 target_include_directories(host_paths PUBLIC src)
 
@@ -54,8 +61,8 @@ add_executable(rxpce WIN32
     src/settings.cpp src/settings_dialog.cpp src/AboutDlg.cpp src/archive.cpp src/video.cpp src/debug.cpp src/frame_timing.cpp
     src/di.cpp src/ds.cpp src/wasapi.cpp src/video_info.cpp src/log.cpp src/d3d11_renderer.cpp src/video_presenter.cpp
     src/MainFrame.cpp src/Pce.cpp src/Sound.cpp src/cd_prepare_dialog.cpp src/state_service.cpp src/machine_runtime.cpp
-    src/host_input.cpp src/host_commands.cpp src/host_runtime.cpp
-    src/replay_codec.cpp src/replay_file.cpp src/replay_media.cpp src/replay_timeline.cpp src/replay_session.cpp
+    src/host_input.cpp src/host_commands.cpp src/host_runtime.cpp src/memory_search_dialog.cpp src/cheats_dialog.cpp
+    src/replay_codec.cpp src/replay_file.cpp src/replay_timeline.cpp src/replay_session.cpp
     src/rxpce.cpp src/rxpce.rc)
 target_compile_features(rxpce PRIVATE cxx_std_17)
 target_compile_definitions(rxpce PRIVATE
@@ -64,7 +71,7 @@ target_compile_definitions(rxpce PRIVATE
     USE_JOYSTICK SOUND DIRECTINPUT_VERSION=0x0800)
 target_include_directories(rxpce PRIVATE src)
 target_include_directories(rxpce SYSTEM PRIVATE third-party/wtl/Include third-party/picojson)
-target_link_libraries(rxpce PRIVATE host_paths machine_core machine_state cartridge miniz dxguid d3d11 dxgi d3dcompiler winmm dinput8 xinput dsound avrt comctl32 comdlg32 ole32 shell32 uuid)
+target_link_libraries(rxpce PRIVATE host_paths cheats machine_core machine_state cartridge miniz dxguid d3d11 dxgi d3dcompiler winmm dinput8 xinput dsound avrt comctl32 comdlg32 ole32 shell32 uuid)
 target_link_options(rxpce PRIVATE "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/rxpce.manifest")
 function(rxpce_copy_notices target)
 foreach(document IN ITEMS

@@ -11,6 +11,7 @@
 namespace {
 std::mutex sound_mutex;
 bool initialized = false, emulating = false;
+bool sound_paused = false;
 rxpce_audio::Mixer mixer;
 rxpce_audio::OutputSettings active_settings;
 HWND output_window = nullptr;
@@ -63,6 +64,7 @@ static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
         reported_clock_resets = 0;
         output_empty = output_deferred = 0;
         emulating = true;
+        sound_paused = false;
         initialized = settings.enabled;
     } catch (const std::exception&) {
         return false;
@@ -181,6 +183,10 @@ void ResetSound(std::uint32_t cycles, const rxpce_audio::PsgState& state) {
 
 std::size_t AvailableMixedAudioFrames() {
     std::lock_guard<std::mutex> lock(sound_mutex);
+    // Both backends use availability to decide whether to overwrite queued audio.
+    // While paused they can always request a device buffer of silence.
+    if (initialized && sound_paused)
+        return active_settings.sample_rate;
     return initialized ? mixer.queued_frames() : 0;
 }
 void DiscardSoundOutput(std::uint32_t cycles) {
@@ -195,11 +201,19 @@ void ReportAudioOutput(bool empty, bool deferred) noexcept {
     if (deferred)
         output_deferred.fetch_add(1, std::memory_order_relaxed);
 }
+void SetSoundPaused(bool paused, std::uint32_t cycles) {
+    std::lock_guard<std::mutex> lock(sound_mutex);
+    if (emulating)
+        mixer.sync(cycles);
+    mixer.discard_output();
+    sound_paused = paused;
+    last_sync_end = {};
+}
 void ReadMixedAudio(float* output, std::size_t frames) {
     if (!frames)
         return;
     std::lock_guard<std::mutex> lock(sound_mutex);
-    if (initialized) {
+    if (initialized && !sound_paused) {
         const auto missing = mixer.mix(output, frames);
         requested_frames += frames;
         missing_frames += missing;

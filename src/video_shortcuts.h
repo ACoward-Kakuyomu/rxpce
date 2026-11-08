@@ -17,7 +17,9 @@ enum class ShortcutCommand {
     reset,
     input_profile,
     record_replay,
-    play_replay
+    play_replay,
+    memory_search,
+    edit_cheats
 };
 struct ShortcutResult {
     bool handled;
@@ -34,6 +36,15 @@ class Shortcuts {
                            bool fullscreen = false) {
         const bool repeated = (flags & (LPARAM(1) << 30)) != 0;
         const bool alt = (flags & (LPARAM(1) << 29)) != 0;
+        if (key == VK_F9 && (message == WM_KEYDOWN || message == WM_KEYUP ||
+                            message == WM_SYSKEYDOWN || message == WM_SYSKEYUP)) {
+            if (message == WM_SYSKEYDOWN && alt) {
+                alt_shortcut = true;
+                return {true, running && !repeated ? ShortcutCommand::edit_cheats : ShortcutCommand::none};
+            }
+            return {true, message == WM_KEYDOWN && running && !repeated && !alt
+                              ? ShortcutCommand::memory_search : ShortcutCommand::none};
+        }
         if ((key == VK_F11 || key == VK_F12) &&
             (message == WM_KEYDOWN || message == WM_KEYUP || message == WM_SYSKEYDOWN ||
              message == WM_SYSKEYUP)) {
