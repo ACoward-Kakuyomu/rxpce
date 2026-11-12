@@ -23,6 +23,8 @@ rxpce 1.5.2 adds F9 memory search and Alt+F9 cheat editing. **Save states from 1
 
 CUEの対応トラックは`AUDIO`、`MODE1/2352`、`MODE1/2048`、参照ファイルは`BINARY`形式です。WAV/MP3を参照するCUEや、CDイメージを入れたZIPは対象外です。生のBINだけではトラック構成が分からないため、CUEを使用してください。
 
+HuCard ROMは8 KiBバンク単位で、先頭に512バイトのcopierヘッダーが付いた形式も読み込めます。それ以外の端数サイズは拒否します。ZIP内のROMも同じ条件です。
+
 コマンドラインではイメージのパスを1つ指定できます。空白を含むパスは引用符で囲みます。
 
 ```powershell
@@ -150,6 +152,8 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 ### 6. 設定の適用時期
 
 `OK`は設定を保存し、`Cancel`は変更を破棄します。倍率とアスペクト比を除く設定は、次のエミュレーション開始時に反映します。Escで停止してから、同じイメージを開き直せます。F2/F3/F4/F7での実行中変更は、その場で反映します。
+
+Settings保存後にF2/F3/F4/F7で実行中の値を選び直すと、その項目は以後の保存でも実行中の値を優先します。操作していない別項目の次回用設定は保持します。
 
 #### Video
 
@@ -311,6 +315,8 @@ Run `rxpce.exe` and select an image through `Game → Open...`. Opening another 
 
 CUE supports `AUDIO`, `MODE1/2352` and `MODE1/2048` tracks in `BINARY` files. WAV/MP3-based CUEs and zipped CD images are unsupported. A raw BIN alone does not describe the disc layout; open its CUE instead.
 
+HuCard ROMs must contain complete 8 KiB banks, optionally preceded by a 512-byte copier header. Other size remainders are rejected. The same rule applies to ROMs inside ZIP files.
+
 You may also pass one image path on the command line. Quote paths containing spaces.
 
 ```powershell
@@ -438,6 +444,8 @@ XInput displays slot and connection status, such as `XInput 1 (Connected)`, rath
 ### 6. Settings and when they apply
 
 `OK` saves settings; `Cancel` discards edits. Except for window scale and aspect ratio, settings apply at the next emulation start. Press Esc and reopen the image. F2/F3/F4/F7 changes take effect immediately during play.
+
+If you select a live value through F2/F3/F4/F7 after saving Settings, that setting's live value takes precedence in later saves. Pending values for other settings are retained.
 
 #### Video
 

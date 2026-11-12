@@ -95,6 +95,8 @@ bool load(const std::filesystem::path& path, Cartridge& result, std::string& err
         else
             next.bytes = std::move(bytes);
         const auto prefix = next.bytes.size() % 8192;
+        if (prefix != 0 && prefix != 512)
+            throw std::runtime_error("ROM size must be complete 8 KiB banks with an optional 512-byte header");
         if (next.bytes.size() - prefix < 8192)
             throw std::runtime_error("ROM must contain at least one 8 KiB bank");
         next.bytes.erase(next.bytes.begin(), next.bytes.begin() + prefix);

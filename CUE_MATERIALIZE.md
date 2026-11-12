@@ -8,6 +8,8 @@
 
 `cue_materialize.exe` は、CUE＋BIN のプリギャップを実データに展開するコマンドラインツールです。CUE の `PREGAP` と記録済みの `INDEX 00`／`INDEX 01` を整理し、トラックごとの BIN と `disc.cue` を新しいフォルダーに出力します。生成ギャップは音声なら無音、MODE1 データならゼロのデータ領域として生成します。MODE1/2352 ではヘッダー・EDC・ECC も生成します。
 
+記録済みのRAWプリギャップは、音声とデータが混在する場合も2352バイトをそのまま保持します。Mode1本文のヘッダー・EDC検査はINDEX 01以後に行い、ギャップをMode1本文とみなして拒否しません。
+
 `PREGAP` と記録済みギャップが併存する CUE をそのまま CHD に変換すると、変換方法によっては `INDEX 01` の位置が失われる場合があります。このツールは事前にギャップを実体化し、位置を保持して変換するためのものです。元 CUE を rxpce で直接開く場合には不要です。CHD を直接作成する機能はありません。
 
 ### 変換手順
@@ -46,6 +48,8 @@ CUE 版と CHD 版の rxpce ステートは共有しません。変換後は CHD
 ### Purpose
 
 `cue_materialize.exe` materializes pregaps in CUE/BIN images. It combines generated `PREGAP` and stored `INDEX 00`/`INDEX 01` gaps into per-track BIN files and a new `disc.cue`. Generated audio gaps contain silence; MODE1 gaps contain zero-filled data. MODE1/2352 gaps also receive headers, EDC and ECC.
+
+Stored RAW pregaps retain their original 2352-byte sectors, including mixed audio/data gaps. Mode1 header and EDC validation applies to program sectors from INDEX 01 onward, rather than treating every pregap sector as Mode1 program data.
 
 Direct conversion of a CUE containing both generated and stored pregaps can lose `INDEX 01` positions, depending on the conversion path. This helper prepares explicit gap data before CHD conversion. It is unnecessary when opening the original CUE directly in rxpce. It does not create CHD files itself.
 

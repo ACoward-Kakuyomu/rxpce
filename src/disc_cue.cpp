@@ -428,9 +428,9 @@ bool DiscImage::write_materialized_cue(const std::wstring& folder, std::string& 
                 std::array<unsigned char, 2352> generated{};
                 const unsigned char* sector = generated.data();
                 if (lba >= track.file_lba) {
-                    // Verify stored RAW data, then preserve all 2352 original
-                    // bytes, including its header, EDC and parity.
-                    if (track.mode == TrackMode::mode1_2352) {
+                    // INDEX 00 may contain audio or a mode transition. Preserve
+                    // its RAW bytes; validate Mode1 program data from INDEX 01.
+                    if (track.mode == TrackMode::mode1_2352 && lba >= track.start_lba) {
                         std::array<unsigned char, 2048> data;
                         if (!read_data(lba, data, error))
                             throw std::runtime_error(error);

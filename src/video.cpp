@@ -175,11 +175,28 @@ void ResizeVideoWindow(int width, int height) {
     if (GetClientRect(hwnd, &current) && current.right == client.right &&
         current.bottom == client.bottom)
         return;
-    AdjustWindowRectExForDpi(
+    if (!AdjustWindowRectExForDpi(
         &client, static_cast<DWORD>(GetWindowLongPtr(hwnd, GWL_STYLE)), GetMenu(hwnd) != nullptr,
-        static_cast<DWORD>(GetWindowLongPtr(hwnd, GWL_EXSTYLE)), GetDpiForWindow(hwnd));
-    SetWindowPos(hwnd, nullptr, 0, 0, client.right - client.left, client.bottom - client.top,
-                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        static_cast<DWORD>(GetWindowLongPtr(hwnd, GWL_EXSTYLE)), GetDpiForWindow(hwnd)))
+        return;
+    int outer_width = client.right - client.left, outer_height = client.bottom - client.top;
+    // AdjustWindowRectExForDpi does not account for extra rows of a wrapped
+    // menu. Measure the actual client rather than assuming one menu row.
+    for (unsigned attempt = 0; attempt < 3; ++attempt) {
+        if (!SetWindowPos(hwnd, nullptr, 0, 0, outer_width, outer_height,
+                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) ||
+            !GetClientRect(hwnd, &current))
+            return;
+        const int dx = canvas.width - (current.right - current.left);
+        const int dy = canvas.height - (current.bottom - current.top);
+        if (!dx && !dy)
+            return;
+        RECT outer;
+        if (!GetWindowRect(hwnd, &outer))
+            return;
+        outer_width = outer.right - outer.left + dx;
+        outer_height = outer.bottom - outer.top + dy;
+    }
 }
 
 void ZoomWindow() {

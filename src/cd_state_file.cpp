@@ -2,6 +2,7 @@
 #include "cd_state_file.h"
 #include "state_format.h"
 #include <algorithm>
+#include <filesystem>
 #include "nvram.h"
 #include <windows.h>
 #include "unique_handle.h"
@@ -104,11 +105,11 @@ bool read_state_payload(const std::wstring& path, std::size_t payload_size, std:
     return true;
 }
 bool write_state_file(const std::wstring& path, const std::vector<char>& data, std::string& error) {
-    const auto slash = path.find_last_of(L"/\\");
-    if (slash != std::wstring::npos) {
-        const auto folder = path.substr(0, slash);
-        const auto attributes = GetFileAttributesW(folder.c_str());
-        if (attributes == INVALID_FILE_ATTRIBUTES && !CreateDirectoryW(folder.c_str(), nullptr)) {
+    const auto folder = std::filesystem::path(path).parent_path();
+    if (!folder.empty()) {
+        std::error_code problem;
+        std::filesystem::create_directories(folder, problem);
+        if (problem) {
             error = "Cannot create state folder";
             return false;
         }

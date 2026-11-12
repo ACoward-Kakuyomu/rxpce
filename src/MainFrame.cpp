@@ -768,14 +768,22 @@ BOOL CMainFrame::PreTranslateMessage(MSG* message) {
         event = EV_LOAD;
     if (result.command == rxpce_video::ShortcutCommand::reset)
         event = EV_RESET;
-    if (result.command == rxpce_video::ShortcutCommand::toggle_fps)
+    if (result.command == rxpce_video::ShortcutCommand::toggle_fps) {
+        m_overrides.fps = false; // A later explicit live choice supersedes pending Settings.
         rxpce_host::runtime.show_fps = !rxpce_host::runtime.show_fps.load();
-    if (result.command == rxpce_video::ShortcutCommand::skip_down)
+    }
+    if (result.command == rxpce_video::ShortcutCommand::skip_down) {
+        m_overrides.skip = false;
         event = EV_DOWNSKIPRATE;
-    if (result.command == rxpce_video::ShortcutCommand::skip_up)
+    }
+    if (result.command == rxpce_video::ShortcutCommand::skip_up) {
+        m_overrides.skip = false;
         event = EV_UPSKIPRATE;
-    if (result.command == rxpce_video::ShortcutCommand::toggle_auto)
+    }
+    if (result.command == rxpce_video::ShortcutCommand::toggle_auto) {
+        m_overrides.auto_skip = false;
         event = EV_AUTOFRAMESKIP;
+    }
     if (event)
         MachineCommands().post(event);
     if (result.handled)
