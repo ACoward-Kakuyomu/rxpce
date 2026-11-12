@@ -1,8 +1,8 @@
-# rxpce 1.5.2 操作説明書 / User Manual
+# rxpce 1.5.3 操作説明書 / User Manual
 
-rxpce 1.5.2では、F9のメモリー検索とAlt+F9のチート編集を追加しました。 **1.5.0／1.5.1のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
+rxpce 1.5.3では、CDステート保存、CUE変換、ROM入力検証、設定保存とウィンドウサイズの不具合を修正しました。 **1.5.0／1.5.1／1.5.2のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
 
-rxpce 1.5.2 adds F9 memory search and Alt+F9 cheat editing. **Save states from 1.5.0 and 1.5.1 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
+rxpce 1.5.3 fixes CD state saving, CUE conversion, ROM validation, settings persistence and window sizing. **Save states from 1.5.0, 1.5.1 and 1.5.2 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 

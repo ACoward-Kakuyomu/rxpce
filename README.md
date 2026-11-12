@@ -1,8 +1,8 @@
-# rxpce 1.5.2
+# rxpce 1.5.3
 
-rxpce 1.5.2では、F9のメモリー検索とAlt+F9のチート編集を追加しました。 **1.5.0／1.5.1のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
+rxpce 1.5.3では、CDステート保存、CUE変換、ROM入力検証、設定保存とウィンドウサイズの不具合を修正しました。 **1.5.0／1.5.1／1.5.2のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
 
-rxpce 1.5.2 adds F9 memory search and Alt+F9 cheat editing. **Save states from 1.5.0 and 1.5.1 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
+rxpce 1.5.3 fixes CD state saving, CUE conversion, ROM validation, settings persistence and window sizing. **Save states from 1.5.0, 1.5.1 and 1.5.2 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -18,7 +18,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.5.2の主な対応範囲は次のとおりです。
+1.5.3の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -70,9 +70,9 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.5.2の変更
+### 1.5.3の変更
 
-メモリー検索、チート編集、単発・常時適用、ゲーム別JSON保存を追加しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
+CDステートの多階層保存先、記録済みRAWプリギャップの保持、不正ROMサイズの拒否、設定変更後のショートカット保存、メニュー折返し時のウィンドウサイズを修正しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 **正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
@@ -104,7 +104,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.5.2 |
+| Feature | Support in 1.5.3 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -150,9 +150,9 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.5.2
+### Changes in 1.5.3
 
-Added memory search, cheat editing, single-use and per-frame application, and per-game JSON files. See the [release notes](RELEASE_NOTES.md#english) for details.
+Fixed nested CD state folders, preservation of stored RAW pregaps, invalid ROM size rejection, shortcut persistence after settings changes, and window sizing with wrapped menus. See the [release notes](RELEASE_NOTES.md#english) for details.
 
 **Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
