@@ -1,5 +1,9 @@
 #pragma once
+#include <cstddef>
+#include <functional>
 namespace rxpce_audio {
+
+using ComponentSource = std::function<void(float*,double*,double*,std::size_t,unsigned)>;
 enum class OutputBackend { wasapi, directsound };
 struct OutputSettings {
     bool enabled = true;

@@ -50,6 +50,7 @@ void Session::finish(rxpce_machine::Machine& machine) {
     {
         std::lock_guard<std::mutex> lock(finished_mutex_);
         finished_.emplace(std::move(draft_));
+        finished_ready_ = true;
     }
     recording_ = false;
     LogDumpDetail("Replay recording finished\n");
@@ -61,9 +62,15 @@ std::optional<Recording> Session::take_finished() {
     std::lock_guard<std::mutex> lock(finished_mutex_);
     auto value = std::move(finished_);
     finished_.reset();
+    finished_ready_ = false;
     return value;
 }
-bool Session::boundary(rxpce_machine::Machine& machine, bool toggle, bool stopping) {
+bool Session::boundary(rxpce_machine::Machine& machine, bool toggle, bool stopping,
+                       bool record_request_seen) {
+    struct Acknowledge {
+        std::atomic_bool& pending;bool seen;
+        ~Acknowledge(){if(seen)pending=false;}
+    } acknowledge{record_request_pending_,record_request_seen};
     if (playback_)
         return !stopping && play_input(machine);
     if (recording() && (toggle || stopping || draft_.inputs.size() == max_inputs))

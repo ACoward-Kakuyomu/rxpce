@@ -32,7 +32,8 @@ std::uint64_t elapsed_us(WallClock::time_point begin, WallClock::time_point end)
 static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
                             const rxpce_audio::PsgState& state, std::uint32_t cycles,
                             const rxpce_audio::PsgPhaseState* phase,
-                            std::function<void(float*, std::size_t, unsigned)> source) {
+                            std::function<void(float*, std::size_t, unsigned)> source,
+                            rxpce_audio::ComponentSource components) {
     TrashSound();
     if ((settings.channels != 1 && settings.channels != 2) || !settings.sample_rate ||
         settings.sample_rate > 192000 || !settings.base_clock_hz || !settings.latency_ms ||
@@ -51,6 +52,7 @@ static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
         std::lock_guard<std::mutex> lock(sound_mutex);
         mixer.configure(settings.sample_rate, settings.channels, settings.base_clock_hz, state);
         mixer.set_extra_source(std::move(source));
+        if (components) mixer.set_component_source(std::move(components));
         mixer.reset(cycles, state);
         if (phase) {
             mixer.restore_phase(phase->voices);
@@ -89,7 +91,7 @@ static bool InitializeSound(rxpce_audio::OutputSettings settings, HWND window,
 
 bool InitSound(rxpce_audio::OutputSettings settings, HWND window,
                const rxpce_audio::PsgState& state) {
-    return InitializeSound(settings, window, state, 0, nullptr, {});
+    return InitializeSound(settings, window, state, 0, nullptr, {}, {});
 }
 
 void TrashSound() {
@@ -108,6 +110,14 @@ void TrashSound() {
 void SetSoundExtraSource(std::function<void(float*, std::size_t, unsigned)> source) {
     std::lock_guard<std::mutex> lock(sound_mutex);
     mixer.set_extra_source(std::move(source));
+}
+void SetSoundComponentSource(rxpce_audio::ComponentSource source) {
+    std::lock_guard<std::mutex> lock(sound_mutex);
+    mixer.set_component_source(std::move(source));
+}
+bool SetSoundOutputLevels(unsigned master, unsigned psg, unsigned cdda, unsigned adpcm, bool muted) {
+    std::lock_guard<std::mutex> lock(sound_mutex);
+    return mixer.set_output_levels(master,psg,cdda,adpcm,muted);
 }
 
 std::optional<rxpce_audio::PsgState> SoundPsgWrite(std::uint32_t cycles, unsigned reg,
@@ -133,6 +143,7 @@ rxpce_audio::PsgPhaseState CaptureSoundPhase(std::uint32_t cycles) {
 bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cycles,
                        const rxpce_audio::PsgState& state) {
     std::function<void(float*, std::size_t, unsigned)> source;
+    rxpce_audio::ComponentSource components;
     rxpce_audio::OutputSettings settings;
     HWND window;
     {
@@ -144,10 +155,11 @@ bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cy
             return mixer.restore_render(phase.render, phase.channels, phase.base_clock);
         }
         source = mixer.extra_source();
+        components = mixer.component_source();
         settings = active_settings;
         window = output_window;
     }
-    return InitializeSound(settings, window, state, cycles, &phase, std::move(source));
+    return InitializeSound(settings, window, state, cycles, &phase, std::move(source),std::move(components));
 }
 
 SoundQueueStatistics SyncSoundCycles(std::uint32_t cycles) {

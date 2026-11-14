@@ -2,6 +2,8 @@
 #include "psg_state.h"
 #include "psg_synth.h"
 #include "audio_resampler.h"
+#include "audio_output_gain.h"
+#include "audio_output.h"
 
 #include <algorithm>
 #include <array>
@@ -34,13 +36,13 @@ inline void write_pcm16(const float* source, std::int16_t* first, std::size_t fi
         second[i] = pcm16(source[first_count + i]);
 }
 
-class SampleQueue {
-    std::vector<float> samples_;
+template<class Sample> class BasicSampleQueue {
+    std::vector<Sample> samples_;
     std::size_t read_ = 0, size_ = 0;
 
   public:
     void reset(std::size_t capacity) {
-        samples_.assign(capacity, 0);
+        samples_.assign(capacity, Sample{});
         clear();
     }
     void clear() {
@@ -72,19 +74,26 @@ class SampleQueue {
         }
     }
 
-    void read(float* out, std::size_t count) {
+    template<class Consume> void consume(std::size_t count, Consume consume) {
         while (count && size_) {
             const auto n = (std::min)(count, (std::min)(size_, samples_.size() - read_));
-            std::copy_n(samples_.data() + read_, n, out);
-            out += n;
+            consume(samples_.data() + read_, n);
             count -= n;
             size_ -= n;
             read_ = (read_ + n) % samples_.size();
         }
         if (count)
-            std::fill_n(out, count, 0.0f);
+            consume(nullptr, count);
+    }
+    void read(Sample* out, std::size_t count) {
+        consume(count, [&](const Sample* data, std::size_t size) {
+            if (data) std::copy_n(data,size,out);
+            else std::fill_n(out,size,Sample{});
+            out += size;
+        });
     }
 };
+using SampleQueue = BasicSampleQueue<float>;
 
 class AudioClock {
     std::uint32_t last_ = 0;
@@ -112,12 +121,15 @@ class AudioClock {
 
 class Mixer {
     std::function<void(float*, std::size_t, unsigned)> extra_source_;
+    ComponentSource component_source_;
     PsgState state_;
     PsgSynth synth_;
     BandlimitedBuffer render_;
     std::array<float, 2> level_{};
-    SampleQueue ready_;
+    BasicSampleQueue<OutputSample> ready_;
     std::vector<float> samples_, extra_samples_;
+    std::vector<double> cdda_samples_, adpcm_samples_;
+    OutputGain output_gain_;
     AudioClock clock_;
     unsigned rate_ = 44100, channels_ = 2, base_clock_ = 7170000;
     std::size_t capacity_frames_ = 0;
@@ -129,7 +141,16 @@ class Mixer {
         return clock_discontinuities_;
     }
     void set_extra_source(std::function<void(float*, std::size_t, unsigned)> source) {
+        component_source_ = {};
         extra_source_ = std::move(source);
+    }
+    void set_component_source(ComponentSource source) {
+        extra_source_ = {};
+        component_source_ = std::move(source);
+    }
+    ComponentSource component_source() const { return component_source_; }
+    bool set_output_levels(unsigned master, unsigned psg, unsigned cdda, unsigned adpcm, bool muted) {
+        return output_gain_.set(master,psg,cdda,adpcm,muted);
     }
     std::function<void(float*, std::size_t, unsigned)> extra_source() const {
         return extra_source_;
@@ -187,6 +208,9 @@ class Mixer {
         ready_.reset(capacity_frames_ * channels);
         samples_.resize(capacity_frames_ * channels);
         extra_samples_.resize(samples_.size());
+        cdda_samples_.resize(samples_.size());
+        adpcm_samples_.resize(samples_.size());
+        output_gain_.configure(rate);
         reset(0, state);
     }
     void reset(std::uint32_t cycles, const PsgState& state) {
@@ -214,15 +238,25 @@ class Mixer {
         auto flush = [&] {
             if (!used)
                 return;
-            if (extra_source_) {
+            const auto count = used*channels_;
+            if (component_source_) {
+                component_source_(extra_samples_.data(),cdda_samples_.data(),adpcm_samples_.data(),used,channels_);
+            } else if (extra_source_) {
                 extra_source_(extra_samples_.data(), used, channels_);
-                for (std::size_t n = 0; n < used * channels_; ++n)
-                    samples_[n] += extra_samples_[n];
+                for (std::size_t n=0;n<count;++n) cdda_samples_[n] = extra_samples_[n];
+                std::fill_n(adpcm_samples_.data(),count,0.0);
+            } else {
+                std::fill_n(extra_samples_.data(),count,0.0f);
+                std::fill_n(cdda_samples_.data(),count,0.0);
+                std::fill_n(adpcm_samples_.data(),count,0.0);
             }
             std::size_t offset = 0;
-            ready_.append(used * channels_, [&](float* out, std::size_t count) {
-                std::copy_n(samples_.data() + offset, count, out);
-                offset += count;
+            ready_.append(count, [&](OutputSample* out, std::size_t size) {
+                for (std::size_t n=0;n<size;++n,++offset) {
+                    const float psg = samples_[offset];
+                    const float legacy = (component_source_ || extra_source_) ? psg+extra_samples_[offset] : psg;
+                    out[n] = {legacy,psg,cdda_samples_[offset],adpcm_samples_[offset]};
+                }
             });
             used = 0;
         };
@@ -275,8 +309,13 @@ class Mixer {
     // Return missing PCM frames; silence is still supplied without advancing devices.
     std::size_t mix(float* out, std::size_t frames) {
         const auto available = ready_.queued() / channels_;
-        if (frames)
-            ready_.read(out, frames * channels_);
+        ready_.consume(frames*channels_,[&](const OutputSample* samples,std::size_t count) {
+            for (std::size_t offset=0;offset<count;offset+=channels_) {
+                output_gain_.next_frame();
+                for (unsigned ch=0;ch<channels_;++ch)
+                    *out++ = output_gain_.apply(samples ? samples[offset+ch] : OutputSample{});
+            }
+        });
         return frames > available ? frames - available : 0;
     }
 

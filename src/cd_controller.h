@@ -15,6 +15,8 @@ class Controller {
     void connect(const Toc* toc, ReadData read, ReadAudio audio = {});
     void configure_audio(unsigned rate);
     void read_audio(float* out, std::size_t frames, unsigned channels);
+    void read_audio_components(float* legacy, double* cdda, double* adpcm,
+                               std::size_t frames, unsigned channels);
     struct AudioStatistics {
         std::uint64_t requested = 0, unavailable = 0, overwritten = 0, gaps = 0;
     };
@@ -75,7 +77,7 @@ class Controller {
     std::array<std::int16_t, 2> cdda_sample_{};
     std::array<std::uint16_t, 2> pcm_latch_{};
     bool cdda_pcm_logged_ = false, adpcm_pcm_logged_ = false;
-    rxpce_audio::SampleQueue samples_;
+    rxpce_audio::BasicSampleQueue<rxpce_audio::OutputSample> samples_;
     AudioStatistics audio_statistics_;
     std::uint64_t generated_frames_ = 0, consumed_frames_ = 0;
     rxpce_audio::BandlimitedBuffer cdda_render_, adpcm_render_;

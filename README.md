@@ -52,7 +52,9 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 3. CDゲームでは、先に`View → Settings... → Folders → System Card BIOS (CD only)`で対応BIOSを指定し、`.cue`または`.chd`を開きます。BIOS画面ではRun（初期設定は`Enter`）を押してゲームを開始します。
 4. ゲームパッドを使う場合は`Settings → Input`でプレイヤーの`Input device`を選択します。初期状態の入力デバイスは`Keyboard`です。
 
-設定変更の多くは**次のエミュレーション開始時**に反映されます。`Esc`で停止し、ゲームを開き直してください。`Window scale`と`Aspect ratio`は`OK`確定時に反映されます。F10のResetは設定を適用し直す操作ではありません。
+設定変更の多くは**次のエミュレーション開始時**に反映されます。`Esc`で停止し、ゲームを開き直してください。`Window scale`、`Aspect ratio`、全体／PSG／CD-DA／ADPCMの音量とMuteは、`OK`で保存できた時点で反映されます。全体音量とMuteは`View → Audio`からも変更できます。F10のResetは設定を適用し直す操作ではありません。
+
+Explorerからゲーム表示領域へ`.pce`／`.zip`／`.cue`／`.chd`を**1個**ドラッグ＆ドロップしても開けます。停止中・通常プレイ中、ウィンドウ・全画面で利用できます。設定やメモリーツールの表示中、リプレイ記録／再生・保存待ち、読み込み・停止処理中は受け付けません。処理を終えてから落とし直してください。詳しくは[操作説明書](MANUAL.md)を参照してください。
 
 ### よく使う操作
 
@@ -138,7 +140,9 @@ Extract the complete distribution into a writable folder and run `rxpce.exe`. Av
 3. For a CD game, first select a supported BIOS under `View → Settings... → Folders → System Card BIOS (CD only)`, then open its `.cue` or `.chd`. Press Run (`Enter` by default) on the BIOS screen.
 4. To use a gamepad, choose its `Input device` in `Settings → Input`. The default device is `Keyboard`.
 
-Most settings apply at the **next emulation start**. Press `Esc` and reopen the image. `Window scale` and `Aspect ratio` apply when you confirm with `OK`. F10 Reset does not reapply pending settings.
+Most settings apply at the **next emulation start**. Press `Esc` and reopen the image. `Window scale`, `Aspect ratio`, master/PSG/CD-DA/ADPCM volume and Mute apply after `OK` successfully saves them. `View → Audio` also controls master volume and Mute. F10 Reset does not reapply pending settings.
+
+You can also drop **one** `.pce`, `.zip`, `.cue` or `.chd` from Explorer onto the game display, while idle or playing, in windowed or fullscreen mode. Drops are unavailable during dialogs, memory tools, replay recording/playback or pending replay saves, and media loading or stopping. Finish the operation and drop the file again. See the [manual](MANUAL.md#english) for details.
 
 | Key | Action |
 | --- | --- |

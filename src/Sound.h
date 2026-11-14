@@ -32,6 +32,8 @@ void DiscardSoundOutput(std::uint32_t cycles);
 void SetSoundPaused(bool paused, std::uint32_t cycles);
 // Producer-thread callback; the playback thread only consumes the finished mix.
 void SetSoundExtraSource(std::function<void(float*, std::size_t, unsigned)> source);
+void SetSoundComponentSource(rxpce_audio::ComponentSource source);
+bool SetSoundOutputLevels(unsigned master, unsigned psg, unsigned cdda, unsigned adpcm, bool muted);
 rxpce_audio::PsgPhaseState CaptureSoundPhase(std::uint32_t cycles);
 bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cycles,
                        const rxpce_audio::PsgState& state);

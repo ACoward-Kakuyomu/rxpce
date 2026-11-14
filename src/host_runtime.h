@@ -11,7 +11,8 @@ namespace rxpce_host {
 // until ShutdownHost; consumers receive a bounded view, never own the pixels.
 int RunEmulation(const std::filesystem::path& backup_file, rxpce_replay::Session* replay = nullptr,
                  rxpce_cheats::Session* cheats = nullptr,
-                 const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable = {});
+                 const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable = {},
+                 const std::function<void()>& ready = {});
 // Called once on the emulation worker if enabled audio cannot initialize.
 // The UI recipient must post a generation-tagged notification, never show a dialog here.
 bool InitializeHost(rxpce_machine::Machine& machine,

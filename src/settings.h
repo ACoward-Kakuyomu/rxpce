@@ -20,6 +20,9 @@ struct Settings {
         bool enabled = true;
         std::string backend = "wasapi";
         int sample_rate = 44100, channels = 2, latency_ms = 40, cooperative_level = 2;
+        int volume_percent = 100, psg_volume_percent = 100, cdda_volume_percent = 100,
+            adpcm_volume_percent = 100;
+        bool muted = false;
     } audio;
     struct Player {
         std::string device = "keyboard";

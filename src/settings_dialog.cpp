@@ -233,32 +233,45 @@ LRESULT SettingsDialog::OnInit(UINT, WPARAM, LPARAM, BOOL&) {
         add(0, L"EDIT", L"", palette, 20, 136, 330, 14, edit, WS_EX_CLIENTEDGE);
         set_text(palette, value.video.palette_file);
         add(0, L"BUTTON", L"...", palette_browse, 358, 136, 32, 14, WS_TABSTOP);
-        add(1, L"BUTTON", L"Enable audio", sound, 20, 30, 100, 14, WS_TABSTOP | BS_AUTOCHECKBOX);
+        add(1, L"BUTTON", L"Enable audio", sound, 20, 30, 180, 14, WS_TABSTOP | BS_AUTOCHECKBOX);
         CheckDlgButton(sound, value.audio.enabled);
-        add(1, L"BUTTON", L"DirectSound", ds_backend, 130, 30, 100, 14,
+        add(1, L"BUTTON", L"WASAPI (shared)", wasapi_backend, 20, 48, 94, 14,
             WS_GROUP | WS_TABSTOP | BS_AUTORADIOBUTTON);
-        add(1, L"BUTTON", L"WASAPI (shared)", wasapi_backend, 245, 30, 145, 14,
+        add(1, L"BUTTON", L"DirectSound", ds_backend, 114, 48, 90, 14,
             WS_TABSTOP | BS_AUTORADIOBUTTON);
         CheckRadioButton(ds_backend, wasapi_backend,
                          value.audio.backend == "wasapi" ? wasapi_backend : ds_backend);
-        label(1, L"Sample rate (Hz)", 20, 56);
-        add(1, L"COMBOBOX", L"", rate, 130, 54, 110, 150, combo);
+        label(1, L"Sample rate (Hz)", 20, 67, 80);
+        add(1, L"COMBOBOX", L"", rate, 100, 65, 94, 150, combo);
         for (int n : {48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000})
             combo_item(rate, std::to_wstring(n), n);
         select_data(rate, value.audio.sample_rate);
-        label(1, L"Channels", 20, 78);
-        add(1, L"COMBOBOX", L"", channels, 130, 76, 110, 60, combo);
+        label(1, L"Channels", 20, 88, 75);
+        add(1, L"COMBOBOX", L"", channels, 100, 86, 94, 60, combo);
         combo_item(channels, L"Mono", 1);
         combo_item(channels, L"Stereo", 2);
         select_data(channels, value.audio.channels);
-        label(1, L"Latency (20-160 ms)", 20, 100, 110);
-        add(1, L"EDIT", L"", latency, 130, 98, 45, 14, edit | ES_NUMBER, WS_EX_CLIENTEDGE);
+        label(1, L"Latency (ms)", 20, 109, 75);
+        add(1, L"EDIT", L"", latency, 100, 107, 40, 14, edit | ES_NUMBER, WS_EX_CLIENTEDGE);
         set_number(latency, value.audio.latency_ms);
-        slider(1, latency_slider, 180, 96, 210, 20, 160, value.audio.latency_ms);
-        label(1, L"DirectSound level", 20, 122);
-        slider(1, coop, 130, 118, 260, 0, 2, value.audio.cooperative_level);
-        add(1, L"STATIC", L"0: Write primary   1: Exclusive   2: Priority", coop_label, 20, 138,
-            370, 12);
+        slider(1, latency_slider, 144, 105, 50, 20, 160, value.audio.latency_ms);
+        label(1, L"DS level (0-2)", 20, 129, 75);
+        slider(1, coop, 100, 125, 94, 0, 2, value.audio.cooperative_level);
+        add(1, L"STATIC", L"0 Write / 1 Exclusive / 2 Priority", coop_label, 20, 143, 184, 10);
+        label(1,L"Levels / Mute (apply on OK)",214,30,180);
+        const wchar_t* level_labels[]={L"Master (%)",L"PSG (%)",L"CD-DA (%)",L"ADPCM (%)"};
+        const int levels[]={value.audio.volume_percent,value.audio.psg_volume_percent,
+                            value.audio.cdda_volume_percent,value.audio.adpcm_volume_percent};
+        for (int n=0;n<4;++n) {
+            const int y=51+n*22;
+            label(1,level_labels[n],214,y,70);
+            add(1,L"EDIT",L"",IDC_AUDIO_MASTER+n,286,y-2,38,14,edit|ES_NUMBER,WS_EX_CLIENTEDGE);
+            set_number(IDC_AUDIO_MASTER+n,levels[n]);
+            slider(1,IDC_AUDIO_MASTER_SLIDER+n,330,y-4,60,0,100,levels[n]);
+            ::SendMessage(GetDlgItem(IDC_AUDIO_MASTER_SLIDER+n),TBM_SETTICFREQ,25,0);
+        }
+        add(1,L"BUTTON",L"Mute",IDC_AUDIO_MUTED,214,138,176,14,WS_TABSTOP|BS_AUTOCHECKBOX);
+        CheckDlgButton(IDC_AUDIO_MUTED,value.audio.muted);
         update_audio_controls();
         label(2, L"Profile", 20, 30, 43);
         add(2, L"COMBOBOX", L"", IDC_PROFILE_SLOT, 65, 28, 45, 150, combo);
@@ -557,6 +570,9 @@ LRESULT SettingsDialog::OnScroll(UINT, WPARAM, LPARAM control, BOOL&) {
             set_number(
                 id == skip_slider ? skip : latency,
                 static_cast<int>(::SendMessage(reinterpret_cast<HWND>(control), TBM_GETPOS, 0, 0)));
+        else if (id>=IDC_AUDIO_MASTER_SLIDER && id<=IDC_AUDIO_ADPCM_SLIDER)
+            set_number(IDC_AUDIO_MASTER+id-IDC_AUDIO_MASTER_SLIDER,
+                static_cast<int>(::SendMessage(reinterpret_cast<HWND>(control),TBM_GETPOS,0,0)));
         return 0;
     } catch (const std::exception& error) {
         return abort_dialog(error.what());
@@ -642,6 +658,11 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
             value.audio.latency_ms = number(latency);
             value.audio.cooperative_level =
                 static_cast<int>(::SendMessage(GetDlgItem(coop), TBM_GETPOS, 0, 0));
+            value.audio.volume_percent=number(IDC_AUDIO_MASTER);
+            value.audio.psg_volume_percent=number(IDC_AUDIO_PSG);
+            value.audio.cdda_volume_percent=number(IDC_AUDIO_CDDA);
+            value.audio.adpcm_volume_percent=number(IDC_AUDIO_ADPCM);
+            value.audio.muted=IsDlgButtonChecked(IDC_AUDIO_MUTED)!=0;
             value.folders.rom = text(rom);
             value.folders.state = text(state);
             value.advanced.vdc_emulation =
@@ -709,10 +730,13 @@ LRESULT SettingsDialog::OnCommand(UINT, WPARAM command, LPARAM, BOOL& handled) {
             ::SetWindowTextW(GetDlgItem(bios_info), L"Checked when CD emulation starts");
         else if (id == rom_browse || id == state_browse)
             browse(id == rom_browse ? rom : state, true);
-        else if (!initializing && (id == skip || id == latency) && code == EN_CHANGE) {
+        else if (!initializing && (id == skip || id == latency ||
+                 (id>=IDC_AUDIO_MASTER && id<=IDC_AUDIO_ADPCM)) && code == EN_CHANGE) {
             try {
                 const int n = number(id);
-                ::SendMessage(GetDlgItem(id == skip ? skip_slider : latency_slider), TBM_SETPOS,
+                const int target=id==skip ? skip_slider : id==latency ? latency_slider :
+                                  IDC_AUDIO_MASTER_SLIDER+id-IDC_AUDIO_MASTER;
+                ::SendMessage(GetDlgItem(target), TBM_SETPOS,
                               TRUE, n);
             } catch (...) {
             }

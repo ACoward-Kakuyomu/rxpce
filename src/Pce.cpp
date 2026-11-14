@@ -299,9 +299,10 @@ int CartLoad() {
         machine.cd_controller.configure_audio(
             rxpce_host::runtime.sound.enabled ? rxpce_host::runtime.sound.sample_rate : 0);
 #ifdef SOUND
-        SetSoundExtraSource([&machine](float* out, std::size_t frames, unsigned channels) {
+        SetSoundComponentSource([&machine](float* out, double* cdda, double* adpcm,
+                                          std::size_t frames, unsigned channels) {
             machine.cd_controller.advance(machine.cpu.cpu.elapsed);
-            machine.cd_controller.read_audio(out, frames, channels);
+            machine.cd_controller.read_audio_components(out,cdda,adpcm,frames,channels);
         });
 #endif
         machine.cd_controller.trace = [](const std::string& text) {
@@ -531,7 +532,8 @@ static void TrashPCE(const std::filesystem::path& backmemname, bool replaying) {
 
 int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
                             rxpce_replay::Session* session, rxpce_cheats::Session* cheats_session,
-                            const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable) {
+                            const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable,
+                            const std::function<void()>& ready) {
     rxpce_replay::Session normal;
     auto& replay = session ? *session : normal;
     rxpce_cheats::Session normal_cheats;
@@ -560,6 +562,7 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
             core_started = true;
             if (InitPCE(backup_file, source != nullptr) == 0) {
                 SetInfoString("Emulation started");
+                if(ready) ready();
                 result = RunPCE(replay, cheats) ? 0 : -1;
             }
         }

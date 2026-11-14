@@ -45,6 +45,11 @@ void require(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
 }
+void validate_audio_levels(const Settings::Audio& audio) {
+    for (int level : {audio.volume_percent,audio.psg_volume_percent,
+                      audio.cdda_volume_percent,audio.adpcm_volume_percent})
+        require(level>=0 && level<=100,"Audio volume must be between 0 and 100 percent");
+}
 const picojson::object& object(const picojson::value& value) {
     require(value.is<picojson::object>(), "Expected a JSON object");
     return value.get<picojson::object>();
@@ -292,6 +297,7 @@ bool validate(const Settings& s, std::string& error) {
                     s.audio.latency_ms <= 160 && s.audio.cooperative_level >= 0 &&
                     s.audio.cooperative_level <= 2,
                 "Invalid audio setting");
+        validate_audio_levels(s.audio);
         require(s.advanced.base_clock_hz >= 1000000 && s.advanced.base_clock_hz <= 85920000,
                 "Invalid base clock");
         require(valid_slot(s.selected_profile), "Invalid selected input profile");
@@ -360,6 +366,11 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
         read(a, "channels", s.audio.channels);
         read(a, "latency_ms", s.audio.latency_ms);
         read(a, "cooperative_level", s.audio.cooperative_level);
+        read(a,"volume_percent",s.audio.volume_percent);
+        read(a,"psg_volume_percent",s.audio.psg_volume_percent);
+        read(a,"cdda_volume_percent",s.audio.cdda_volume_percent);
+        read(a,"adpcm_volume_percent",s.audio.adpcm_volume_percent);
+        read(a,"muted",s.audio.muted);
         const auto& i = object(field(r, "input"));
         read(i, "xinput_enabled", s.input.xinput_enabled);
         read(i, "directinput_enabled", s.input.directinput_enabled);
@@ -432,6 +443,7 @@ bool decode(const std::string& json, Settings& settings, std::string& error) {
 }
 std::string encode(const Settings& s) {
     require(rxpce_video::valid_aspect_mode(s.video.aspect_mode), "Invalid aspect ratio");
+    validate_audio_levels(s.audio);
     picojson::object v, a, i, f, x, r, cd;
     v["adapter"] = val(s.video.adapter);
     v["zoom"] = val(s.video.zoom);
@@ -446,6 +458,11 @@ std::string encode(const Settings& s) {
     a["channels"] = val(s.audio.channels);
     a["latency_ms"] = val(s.audio.latency_ms);
     a["cooperative_level"] = val(s.audio.cooperative_level);
+    a["volume_percent"] = val(s.audio.volume_percent);
+    a["psg_volume_percent"] = val(s.audio.psg_volume_percent);
+    a["cdda_volume_percent"] = val(s.audio.cdda_volume_percent);
+    a["adpcm_volume_percent"] = val(s.audio.adpcm_volume_percent);
+    a["muted"] = val(s.audio.muted);
     picojson::array profiles;
     for (int slot = 1; slot <= Settings::input_profile_count; ++slot) {
         const auto& inactive = s.inactive_profiles[slot - 1];

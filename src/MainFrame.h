@@ -21,6 +21,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
     MESSAGE_HANDLER(WM_ACTIVATEAPP, OnActivateApp)
     MESSAGE_HANDLER(WM_SETCURSOR, OnSetCursor)
+    MESSAGE_HANDLER(WM_DROPFILES, OnDropFiles)
     MESSAGE_HANDLER(WM_INITMENU, OnInitMenu)
     MESSAGE_HANDLER(WM_VIDEO_INITIALIZE, OnVideoInitialize)
     MESSAGE_HANDLER(WM_VIDEO_SIZE, OnVideoSize)
@@ -31,12 +32,14 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_APP + 11, OnMemorySearchClosed)
     MESSAGE_HANDLER(WM_APP + 12, OnCheatOperation)
     MESSAGE_HANDLER(WM_APP + 13, OnAudioUnavailable)
+    MESSAGE_HANDLER(WM_APP + 14, OnWorkerReady)
     COMMAND_ID_HANDLER(IDC_MEMORY_SEARCH, OnMemorySearch)
     COMMAND_ID_HANDLER(IDC_MEMORY_CHEATS, OnMemorySearch)
     COMMAND_RANGE_HANDLER(IDC_EXIT, IDC_STOP, OnCommand)
     COMMAND_RANGE_HANDLER(IDC_INPUT_PROFILE_FIRST, IDC_INPUT_PROFILE_LAST, OnInputProfile)
     COMMAND_RANGE_HANDLER(IDC_REPLAY_RECORD, IDC_REPLAY_DISCARD, OnReplayCommand)
     COMMAND_RANGE_HANDLER(IDC_RECENT_GAME_FIRST, IDC_CLEAR_GAME_PROFILE, OnGameHistory)
+    COMMAND_RANGE_HANDLER(IDC_AUDIO_MUTE, IDC_AUDIO_DOWN, OnAudioCommand)
     CHAIN_MSG_MAP(WTL::CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
   private:
@@ -59,6 +62,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     unsigned m_generation = 0;
     unsigned m_audioWarningGeneration = 0;
     bool m_stopping = false;
+    bool m_dropInitialized=false, m_closing=false, m_loadingMedia=false, m_workerReady=false;
     bool m_preparing = false, m_closeAfterPrepare = false;
     std::atomic_bool m_cancelPrepare{false};
     struct WorkerStart {
@@ -103,6 +107,14 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     LRESULT OnReplayFinished(UINT, WPARAM, LPARAM, BOOL&);
     void OnSettings();
     void CaptureRuntime();
+    void CaptureRuntime(rxpce_config::Settings& pending) const;
+    void ApplyAudioLevels();
+    bool CanDropGame() const noexcept;
+    void UpdateDropAcceptance() noexcept;
+    LRESULT OnDropFiles(UINT, WPARAM, LPARAM, BOOL&);
+    LRESULT OnWorkerReady(UINT, WPARAM, LPARAM, BOOL&);
+    void UpdateAudioMenu();
+    LRESULT OnAudioCommand(WORD, WORD, HWND, BOOL&);
     bool CanSelectInputProfile() const;
     void UpdateInputProfileLabels();
     LRESULT OnInputProfile(WORD, WORD, HWND, BOOL&);

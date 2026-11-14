@@ -101,29 +101,42 @@ void Controller::update_adpcm_audio(unsigned correction, unsigned denominator) {
     adpcm_render_level_ = adpcm_sample_;
 }
 void Controller::read_audio(float* out, std::size_t frames, unsigned channels) {
-    if (channels == 2) {
-        const auto available = samples_.queued() / 2;
-        const auto missing = generated_frames_ - consumed_frames_ - available;
-        const auto gap = static_cast<std::size_t>((std::min)(std::uint64_t(frames), missing));
-        if (output_rate_) {
-            audio_statistics_.requested += frames;
-            audio_statistics_.gaps += gap;
-            audio_statistics_.unavailable += frames - gap - (std::min)(frames - gap, available);
-        }
-        std::fill_n(out, gap * 2, 0.0f);
-        samples_.read(out + gap * 2, (frames - gap) * 2);
-        consumed_frames_ += gap + (std::min)(frames - gap, available);
-    } else if (channels == 1) {
-        float stereo[512];
-        while (frames) {
-            const auto chunk = (std::min)(frames, std::size_t(256));
-            read_audio(stereo, chunk, 2);
-            for (std::size_t n = 0; n < chunk; ++n)
-                *out++ = (stereo[2 * n] + stereo[2 * n + 1]) * 0.5f;
-            frames -= chunk;
-        }
-    } else
+    read_audio_components(out,nullptr,nullptr,frames,channels);
+}
+void Controller::read_audio_components(float* legacy, double* cdda, double* adpcm,
+                                       std::size_t frames, unsigned channels) {
+    if (channels != 1 && channels != 2)
         throw std::invalid_argument("Invalid CD audio channels");
+    const auto available = samples_.queued()/2;
+    const auto missing = generated_frames_-consumed_frames_-available;
+    const auto gap = static_cast<std::size_t>((std::min)(std::uint64_t(frames),missing));
+    if (output_rate_) {
+        audio_statistics_.requested += frames;
+        audio_statistics_.gaps += gap;
+        audio_statistics_.unavailable += frames-gap-(std::min)(frames-gap,available);
+    }
+    std::fill_n(legacy,gap*channels,0.0f);
+    if (cdda) std::fill_n(cdda,gap*channels,0.0);
+    if (adpcm) std::fill_n(adpcm,gap*channels,0.0);
+    std::size_t position=gap*channels;
+    samples_.consume((frames-gap)*2,[&](const rxpce_audio::OutputSample* samples,std::size_t count) {
+        for (std::size_t offset=0;offset<count;offset+=2) {
+            const auto left = samples ? samples[offset] : rxpce_audio::OutputSample{};
+            const auto right = samples ? samples[offset+1] : rxpce_audio::OutputSample{};
+            if (channels==1) {
+                legacy[position]=(left.legacy+right.legacy)*0.5f;
+                if (cdda) cdda[position]=(left.cdda+right.cdda)*0.5;
+                if (adpcm) adpcm[position]=(left.adpcm+right.adpcm)*0.5;
+                ++position;
+            } else {
+                legacy[position]=left.legacy; legacy[position+1]=right.legacy;
+                if (cdda) { cdda[position]=left.cdda; cdda[position+1]=right.cdda; }
+                if (adpcm) { adpcm[position]=left.adpcm; adpcm[position+1]=right.adpcm; }
+                position+=2;
+            }
+        }
+    });
+    consumed_frames_ += gap+(std::min)(frames-gap,available);
 }
 void Controller::reset_adpcm() {
     adpcm_playing_ = adpcm_half_ = adpcm_end_ = adpcm_low_ = false;
@@ -253,12 +266,16 @@ void Controller::emit_sample() {
     const double adpcm_gain = recent[1] + (previous[1] - recent[1]) * fraction;
     fade_cursor_ = (fade_cursor_ + 1) % 256;
     const auto cdda = cdda_render_.read(), adpcm = adpcm_render_.read();
-    float pair[] = {static_cast<float>(cdda[0] * cdda_gain + adpcm[0] * adpcm_gain),
-                    static_cast<float>(cdda[1] * cdda_gain + adpcm[1] * adpcm_gain)};
+    rxpce_audio::OutputSample pair[2];
+    for (unsigned ch=0;ch<2;++ch) {
+        pair[ch].cdda=cdda[ch]*cdda_gain;
+        pair[ch].adpcm=adpcm[ch]*adpcm_gain;
+        pair[ch].legacy=static_cast<float>(pair[ch].cdda+pair[ch].adpcm);
+    }
     unsigned position = 0;
     if (samples_.queued() / 2 == (output_rate_ + 4) / 5)
         ++audio_statistics_.overwritten;
-    samples_.append(2, [&](float* out, std::size_t count) {
+    samples_.append(2, [&](rxpce_audio::OutputSample* out, std::size_t count) {
         std::copy_n(pair + position, count, out);
         position += static_cast<unsigned>(count);
     });

@@ -12,10 +12,23 @@
 #include "machine_commands.h"
 #include "host_runtime.h"
 #include "host_settings.h"
+#include "Sound.h"
+#include "game_drop.h"
 #include "memory_search_pause.h"
 #include <shellapi.h>
 #include <cwctype>
 #include <stdexcept>
+#include <algorithm>
+
+namespace {
+struct OpeningScope {
+    bool& flag;
+    explicit OpeningScope(bool& value):flag(value){flag=true;}
+    OpeningScope(const OpeningScope&)=delete;
+    OpeningScope& operator=(const OpeningScope&)=delete;
+    ~OpeningScope(){flag=false;}
+};
+}
 
 void CMainFrame::ShowFailure(const char* detail, const char* title) {
     {
@@ -60,6 +73,8 @@ LRESULT CMainFrame::OnCreate(UINT, WPARAM, LPARAM, BOOL&) {
     return 0;
 }
 BOOL CMainFrame::OnIdle() {
+    UpdateDropAcceptance();
+    UpdateAudioMenu();
     const bool ready = MachineCommands().ready();
     const bool replay_busy = ReplayInProgress();
     ::EnableMenuItem(m_menu, IDC_MEMORY_SEARCH, MF_BYCOMMAND |
@@ -101,6 +116,8 @@ LRESULT CMainFrame::OnVideoInitialize(UINT, WPARAM, LPARAM, BOOL&) {
         }
         if (!m_commandPath.empty())
             LoadMediaPath(m_commandPath);
+        m_dropInitialized=true;
+        UpdateDropAcceptance();
         return 0;
     } catch (const std::exception& error) {
         ShowFailure(error.what(), "rxpce operation failed");
@@ -129,6 +146,8 @@ unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
             [window = start->frame->m_hWnd, generation = start->generation]
             (rxpce_audio::OutputBackend backend) {
                 ::PostMessage(window, WM_APP + 13, generation, static_cast<LPARAM>(backend));
+            },[window=start->frame->m_hWnd,generation=start->generation] {
+                ::PostMessage(window,WM_APP+14,generation,0);
             });
     } catch (const std::exception& error) {
         LogDump("Emulation start failed: %s\n", error.what());
@@ -137,6 +156,7 @@ unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
     return result;
 }
 BOOL CMainFrame::StartMainLoop(std::shared_ptr<const rxpce_replay::Recording> playback) {
+    m_workerReady=false;
     m_memorySearch = {};
     m_memorySearchState = {};
     m_memorySearchRequested = false;
@@ -169,6 +189,7 @@ BOOL CMainFrame::StartMainLoop(std::shared_ptr<const rxpce_replay::Recording> pl
     return TRUE;
 }
 void CMainFrame::StopMainLoop() {
+    m_workerReady=false;
     ++m_generation; // Invalidate even a completion notification already in the UI queue.
     if (m_thread) {
         m_stopping = true;
@@ -191,11 +212,14 @@ LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
         return 0;
     }
     if (m_preparing) {
+        m_closing=true;
         m_cancelPrepare = true;
         m_closeAfterPrepare = true;
-    } else if (m_stopping)
+    } else if (m_stopping) {
+        m_closing=true;
         PostMessage(WM_CLOSE);
-    else {
+    } else {
+        m_closing=true;
         if (m_replay && m_replay->recording())
             StopEmulation(false);
         CollectFinishedReplay();
@@ -203,8 +227,10 @@ LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
             rxpce_config::DialogInputScope input;
             const int choice = MessageBox("Save the pending replay before exiting?",
                                           "Replay recording", MB_YESNOCANCEL | MB_ICONQUESTION);
-            if (choice == IDCANCEL || (choice == IDYES && !SavePendingReplay()))
+            if (choice == IDCANCEL || (choice == IDYES && !SavePendingReplay())) {
+                m_closing=false;
                 return 0;
+            }
             if (choice == IDNO)
                 m_pendingRecording.reset();
         }
@@ -238,6 +264,8 @@ LRESULT CMainFrame::OnAudioUnavailable(UINT, WPARAM generation, LPARAM backend, 
     return 0;
 }
 LRESULT CMainFrame::OnDestroy(UINT, WPARAM, LPARAM, BOOL&) {
+    m_closing=true;
+    ::DragAcceptFiles(m_hWnd,FALSE);
     StopMainLoop();
     ShutdownVideo();
     if (m_profileLoaded) {
@@ -541,7 +569,8 @@ LRESULT CMainFrame::OnReplayCommand(WORD, WORD id, HWND, BOOL&) {
         if (id == IDC_REPLAY_PLAY)
             PlayReplay();
         else if (id == IDC_REPLAY_RECORD && m_replay && !m_replay->source() && !m_pendingRecording &&
-                 (!m_cheats || !m_cheats->freezes()))
+                 MachineCommands().ready() && (!m_cheats || !m_cheats->freezes()) &&
+                 m_replay->request_record_toggle())
             MachineCommands().post(EV_REPLAY_RECORD);
         else if (id == IDC_REPLAY_SAVE)
             SavePendingReplay();
@@ -561,8 +590,10 @@ LRESULT CMainFrame::OnReplayFinished(UINT, WPARAM generation, LPARAM, BOOL&) {
 }
 BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
                               std::shared_ptr<const rxpce_replay::Recording> playback) {
-    if (m_preparing)
+    if (m_preparing || m_loadingMedia)
         return FALSE;
+    OpeningScope opening(m_loadingMedia);
+    UpdateDropAcceptance();
     auto suffix = path.substr(
         path.find_last_of(L'.') == std::wstring::npos ? path.size() : path.find_last_of(L'.'));
     for (auto& ch : suffix)
@@ -584,6 +615,7 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
     try {
         rxpce_config::DialogInputScope input;
         ::SetCursor(::LoadCursor(nullptr, IDC_ARROW));
+        LogDumpDetail("CD preparation started\n");
         ready =
             PrepareCdWithProgress(m_hWnd, path, rxpce_config::to_wide(m_config.cd.bios_file),
                                   m_cancelPrepare, session, error,
@@ -633,6 +665,42 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
     if (!game.empty())
         rxpce_config::remember_game(m_config, game);
     return TRUE;
+}
+bool CMainFrame::CanDropGame() const noexcept {
+    return rxpce_ui::can_drop_game({m_dropInitialized && m_profileLoaded!=FALSE,
+        m_closing,m_loadingMedia,m_preparing,m_stopping,rxpce_config::dialog_open.load(),
+        m_memorySearchRequested || bool(m_memorySearchDialog) || m_afterMemoryTools.has_value(),
+        m_replay && m_replay->blocks_media_drop(),m_pendingRecording.has_value(),
+        bool(m_thread) && !m_workerReady});
+}
+void CMainFrame::UpdateDropAcceptance() noexcept {
+    if(!IsWindow()) return;
+    const bool available=CanDropGame();
+    if(((GetWindowLongPtr(GWL_EXSTYLE)&WS_EX_ACCEPTFILES)!=0)!=available)
+        ::DragAcceptFiles(m_hWnd,available);
+}
+LRESULT CMainFrame::OnWorkerReady(UINT,WPARAM generation,LPARAM,BOOL&) {
+    if(generation==m_generation && m_thread && !m_stopping && !m_closing) {
+        m_workerReady=true;
+        UpdateDropAcceptance();
+    }
+    return 0;
+}
+LRESULT CMainFrame::OnDropFiles(UINT,WPARAM handle,LPARAM,BOOL&) {
+    try {
+        const auto selection=rxpce_ui::read_game_drop(reinterpret_cast<HDROP>(handle),CanDropGame());
+        if(selection.error==rxpce_ui::DropError::busy) {
+            LogDumpDetail("Game drop ignored: busy\n");return 0;
+        }
+        if(selection.error!=rxpce_ui::DropError::none) {
+            ShowFailure("Drop one PCE, ZIP, CUE or CHD file.","Cannot open dropped file");return 0;
+        }
+        if(!CanDropGame()) return 0;
+        LogDumpDetail("Opening dropped game\n");
+        LoadMediaPath(selection.path);
+    } catch(const std::exception& error) {ShowFailure(error.what(),"Cannot open dropped file");}
+    UpdateDropAcceptance();
+    return 0;
 }
 BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
                             std::shared_ptr<const rxpce_replay::Recording> playback) {
@@ -859,16 +927,65 @@ void CMainFrame::ApplySettings(const std::filesystem::path& game) {
     rxpce_host::runtime.base_clock_hz = m_config.advanced.base_clock_hz;
     rxpce_host::runtime.show_fps = m_config.advanced.show_fps;
     SetLogDumpDetail(m_config.advanced.log);
+    ApplyAudioLevels();
 }
 void CMainFrame::CaptureRuntime() {
-    auto runtime = m_config;
+    CaptureRuntime(m_config);
+}
+void CMainFrame::CaptureRuntime(rxpce_config::Settings& pending) const {
+    auto runtime = pending;
     runtime.video.zoom = video_settings.zoom;
     runtime.video.aspect_mode = video_settings.aspect_mode;
     runtime.video.auto_frame_skip = rxpce_host::runtime.auto_frame_skip.load();
     runtime.video.frame_skip = rxpce_host::runtime.frame_skip.load();
     runtime.advanced.show_fps = rxpce_host::runtime.show_fps != FALSE;
     runtime.folders.rom = rxpce_paths::utf8(rxpce_host::runtime.rom_directory);
-    rxpce_config::merge_runtime(m_config, runtime, m_overrides);
+    rxpce_config::merge_runtime(pending, runtime, m_overrides);
+}
+void CMainFrame::ApplyAudioLevels() {
+    const auto& audio=m_config.audio;
+    if (!SetSoundOutputLevels(static_cast<unsigned>(audio.volume_percent),static_cast<unsigned>(audio.psg_volume_percent),
+                             static_cast<unsigned>(audio.cdda_volume_percent),static_cast<unsigned>(audio.adpcm_volume_percent),audio.muted))
+        throw std::logic_error("Invalid host audio levels");
+    LogDumpDetail("Output levels: master=%d psg=%d cdda=%d adpcm=%d muted=%d\n",
+                  audio.volume_percent,audio.psg_volume_percent,audio.cdda_volume_percent,
+                  audio.adpcm_volume_percent,audio.muted);
+    UpdateAudioMenu();
+}
+void CMainFrame::UpdateAudioMenu() {
+    if (!m_menu) return;
+    char label[64]; sprintf_s(label,"Master volume: %d%%",m_config.audio.volume_percent);
+    MENUITEMINFOA item{}; item.cbSize=sizeof(item); item.fMask=MIIM_STRING; item.dwTypeData=label;
+    ::SetMenuItemInfoA(m_menu,IDC_AUDIO_LEVEL_LABEL,FALSE,&item);
+    ::CheckMenuItem(m_menu,IDC_AUDIO_MUTE,MF_BYCOMMAND|(m_config.audio.muted?MF_CHECKED:MF_UNCHECKED));
+    const bool enabled=m_profileLoaded && m_configWritable && !m_preparing && !m_stopping &&
+                       !rxpce_config::dialog_open;
+    for (const auto id : {IDC_AUDIO_MUTE,IDC_AUDIO_UP,IDC_AUDIO_DOWN}) {
+        const bool available=enabled && (id!=IDC_AUDIO_UP || m_config.audio.volume_percent<100) &&
+                             (id!=IDC_AUDIO_DOWN || m_config.audio.volume_percent>0);
+        ::EnableMenuItem(m_menu,id,MF_BYCOMMAND|(available?MF_ENABLED:MF_GRAYED));
+    }
+}
+LRESULT CMainFrame::OnAudioCommand(WORD,WORD id,HWND,BOOL&) {
+    if (!m_profileLoaded || !m_configWritable || m_preparing || m_stopping || rxpce_config::dialog_open)
+        return 0;
+    try {
+        auto next=m_config;
+        CaptureRuntime(next);
+        if (id==IDC_AUDIO_MUTE) next.audio.muted=!next.audio.muted;
+        else if (id==IDC_AUDIO_UP) next.audio.volume_percent=(std::min)(100,next.audio.volume_percent+10);
+        else if (id==IDC_AUDIO_DOWN) next.audio.volume_percent=(std::max)(0,next.audio.volume_percent-10);
+        else return 0;
+        if (next.audio.volume_percent==m_config.audio.volume_percent && next.audio.muted==m_config.audio.muted)
+            return 0;
+        std::string error;
+        if (!rxpce_config::save(m_configPath,next,error)) {
+            ShowFailure(error.c_str(),"Cannot save rxpce.json"); return 0;
+        }
+        m_config=std::move(next);
+        ApplyAudioLevels();
+    } catch (const std::exception& error) { ShowFailure(error.what(),"Cannot change audio levels"); }
+    return 0;
 }
 void CMainFrame::SaveProfile() {
     if (!m_configWritable)
@@ -953,7 +1070,7 @@ void CMainFrame::OnSettings() {
         return;
     std::string error;
     if (!rxpce_config::save(m_configPath, dialog.value, error)) {
-        MessageBox(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
+        ShowFailure(error.c_str(), "Cannot save rxpce.json");
         return;
     }
     m_overrides.auto_skip |= dialog.value.video.auto_frame_skip != original.video.auto_frame_skip;
@@ -962,6 +1079,7 @@ void CMainFrame::OnSettings() {
     m_overrides.rom |= dialog.value.folders.rom != original.folders.rom;
     m_config = dialog.value;
     m_configWritable = true;
+    ApplyAudioLevels();
     UpdateInputProfileLabels();
     SetVideoPresentation(m_config.video.aspect_mode, m_config.video.zoom);
 }

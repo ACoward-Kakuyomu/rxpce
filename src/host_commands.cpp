@@ -42,6 +42,7 @@ namespace rxpce_host {
 bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& replay,
                       rxpce_cheats::Session& cheats) {
     auto commands = MachineCommands().take();
+    const bool record_request_seen=(commands & EV_REPLAY_RECORD)!=0;
     if ((commands & EV_REPLAY_RECORD) && cheats.freezes()) {
         commands &= ~EV_REPLAY_RECORD;
         SetInfoString("Disable Always Apply cheats before recording a replay");
@@ -49,7 +50,7 @@ bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& re
     }
     cheats.boundary(IsMachineStopRequested() || (commands & (EV_LOAD | EV_RESET)) != 0);
     const bool was_recording = replay.recording();
-    if (!replay.boundary(machine, (commands & EV_REPLAY_RECORD) != 0, IsMachineStopRequested()))
+    if (!replay.boundary(machine, (commands & EV_REPLAY_RECORD) != 0, IsMachineStopRequested(),record_request_seen))
         return false;
     if (was_recording || replay.recording() || replay.source())
         commands &= ~(EV_SAVE | EV_LOAD | EV_RESET);

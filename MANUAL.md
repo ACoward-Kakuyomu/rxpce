@@ -25,6 +25,14 @@ CUEの対応トラックは`AUDIO`、`MODE1/2352`、`MODE1/2048`、参照ファ�
 
 HuCard ROMは8 KiBバンク単位で、先頭に512バイトのcopierヘッダーが付いた形式も読み込めます。それ以外の端数サイズは拒否します。ZIP内のROMも同じ条件です。
 
+#### ドラッグ＆ドロップ
+
+Explorerからゲーム表示領域へ`.pce`／`.zip`／`.cue`／`.chd`を1個落として開けます。拡張子の大文字・小文字は区別しません。停止中・通常プレイ中、ウィンドウ・全画面で利用でき、同じファイルなら開き直します。ZIPは最初のPCE、CUEは参照BINを既存の位置に置いたままCUEだけを落とします。CD用BIOSは先にSettingsで指定してください。
+
+複数ファイル、フォルダー、BIN単体、ステート、リプレイ、チートJSON、ショートカット、URLは対象外です。設定・ファイル選択・エラーなどのダイアログ、メモリー検索／チート編集、リプレイ記録／再生・未保存の記録、読み込み／開始／停止／終了処理中は受け付けません。後から自動実行する予約はしないため、処理を完了してから落とし直してください。
+
+個数・拡張子の不正では現在のゲームを変えません。内容不正のPCE／ZIPも検証時点では現在のゲームを継続します。CDは検証前に現在のゲームを停止するため、内容不正・読出し失敗・検証取消では停止状態になります。CDのネットワーク利用設定は通常のOpenと共通です。
+
 コマンドラインではイメージのパスを1つ指定できます。空白を含むパスは引用符で囲みます。
 
 ```powershell
@@ -66,6 +74,7 @@ CUE版とCHD版のステートは共有できません。CHDで問題が出る�
 | View → Window Scale | F8 | ウィンドウ倍率を1→2→3→4倍と循環 |
 | View → Fullscreen | Alt+Enter | 全画面／ウィンドウ切替 |
 | View → Input Profiles | Alt+1〜Alt+0 | 停止中に入力プロファイル1〜10を選択 |
+| View → Audio | — | 全体音量の上下・Mute。保存成功後に反映 |
 | View → Settings... | — | 設定画面 |
 | View → About rxpce... | — | バージョン・著作者表示 |
 
@@ -151,7 +160,7 @@ XInputは製品名ではなく`XInput 1 (Connected)`のように接続状態を�
 
 ### 6. 設定の適用時期
 
-`OK`は設定を保存し、`Cancel`は変更を破棄します。倍率とアスペクト比を除く設定は、次のエミュレーション開始時に反映します。Escで停止してから、同じイメージを開き直せます。F2/F3/F4/F7での実行中変更は、その場で反映します。
+`OK`は設定を保存し、`Cancel`は変更を破棄します。倍率・アスペクト比・4音量・Muteは保存成功後に反映し、それ以外は次のエミュレーション開始時に反映します。Escで停止してから、同じイメージを開き直せます。F2/F3/F4/F7での実行中変更は、その場で反映します。
 
 Settings保存後にF2/F3/F4/F7で実行中の値を選び直すと、その項目は以後の保存でも実行中の値を優先します。操作していない別項目の次回用設定は保持します。
 
@@ -182,8 +191,15 @@ Settings保存後にF2/F3/F4/F7で実行中の値を選び直すと、その項�
 | WASAPI (shared)／DirectSound | 初期値はWASAPI。出力方式を選択 |
 | Sample rate (Hz) | 8000、11025、12000、16000、22050、24000、32000、44100、48000。初期値44100 |
 | Channels | Mono／Stereo。初期値Stereo |
-| Latency (20-160 ms) | 初期値40 ms。小さくすると遅延が減りますが、途切れる場合は大きくして確認 |
-| DirectSound level | DirectSound専用。0: Write primary、1: Exclusive、2: Priority。初期値2 |
+| Latency (ms) | 20〜160 ms、初期値40 ms。小さくすると遅延が減りますが、途切れる場合は大きくして確認 |
+| DS level (0-2) | DirectSound専用。0: Write primary、1: Exclusive、2: Priority。初期値2 |
+| Master (%) | 全体音量0〜100%。初期値100 |
+| PSG (%)／CD-DA (%)／ADPCM (%) | 各音源の音量0〜100%。すべて初期値100 |
+| Mute | 全体を消音。初期値オフ。個別の消音は各音源を0%にする |
+
+4音量とMuteはアプリ共通で、OKによる保存成功後に反映します。編集中の試聴は行わず、Cancel・保存失敗では直前の値を保ちます。`View → Audio`の`Master Volume Up`／`Down`は全体音量を10ポイントずつ変更し、`Mute`を切り替えられます。メニューも保存成功後に反映し、設定画面の後に選んだ値を以後も保持します。Mute中の音量変更でMuteは解除しません。無効な設定ファイルを既定値で起動した場合は、Settingsで修復・保存するまでAudioメニューを無効にします。
+
+全項目100%・Muteなしは従来の出力です。値は振幅に対する線形倍率で、全体50%・PSG50%ならPSGは元の25%になります。消音しても内部の音源とゲームは進み、ステート復帰・リセット・リプレイで現在の音量を巻き戻しません。変化を滑らかにする約5 msの処理と、出力済みbuffer分の遅延があります。Enable audioは別設定で、音量操作では有効にしません。
 
 Monoは左右の音声の平均です。音声のレート変換による遅延が出力バッファとは別に加わります。追加分は44100 Hzで約0.73 ms、8000 Hzで最大4 msです。Latencyを小さくする場合は、音切れがないか確認してください。
 
@@ -292,7 +308,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 | ゲームが速すぎる | F2またはVideo設定でAutomatic frame skipを有効にする |
 | パッドが反応しない | Input device、Players、Advancedの入力方式、Connected表示を確認。OK後にゲームを開き直す |
 | 6ボタンが使えない | 対応ゲームであることと、各PlayerのButtons設定を確認 |
-| 設定を変えても反映しない | Window scaleとAspect ratio以外はEsc停止後に開き直す。F10のResetだけでは未適用設定は反映しない |
+| 設定を変えても反映しない | 倍率・比率・音量／Mute以外はEsc停止後に開き直す。F10のResetだけでは未適用設定は反映しない |
 | 音が出ない／途切れる | Enable audio、Windowsの音量/出力先を確認。Latencyを増やして開き直す。別の出力方式でも確認 |
 | CDが開けない | 対応BIOSとサイズ、CUEが参照するBIN、対応CHDかを確認。検証完了まで待つ |
 | CHDだけ起動しない／音声位置がおかしい | 元CUEで確認。変換時のトラック位置とプリギャップの保持を確認 |
@@ -322,6 +338,14 @@ Run `rxpce.exe` and select an image through `Game → Open...`. Opening another 
 CUE supports `AUDIO`, `MODE1/2352` and `MODE1/2048` tracks in `BINARY` files. WAV/MP3-based CUEs and zipped CD images are unsupported. A raw BIN alone does not describe the disc layout; open its CUE instead.
 
 HuCard ROMs must contain complete 8 KiB banks, optionally preceded by a 512-byte copier header. Other size remainders are rejected. The same rule applies to ROMs inside ZIP files.
+
+#### Drag and drop
+
+Drop one `.pce`, `.zip`, `.cue` or `.chd` from Explorer onto the game display. Extensions are case-insensitive. This works while idle or playing, in windowed or fullscreen mode; dropping the same file reopens it. ZIP uses the first PCE. Drop the CUE alone and keep its referenced BIN files in place. Set the CD BIOS in Settings first.
+
+Multiple files, folders, standalone BINs, states, replays, cheat JSON, shortcuts and URLs are unsupported. Drops are unavailable during dialogs (including settings, file pickers and errors), memory search/cheat editing, replay recording/playback or pending recording saves, and loading, starting, stopping or closing. Rejected drops are discarded: finish the operation and drop the file again.
+
+Invalid counts or extensions leave the current game unchanged. Invalid PCE/ZIP content also leaves it running during validation. CD validation stops the current game first, so invalid content, read failures or cancellation leave the application idle. CD network settings are shared with normal Open.
 
 You may also pass one image path on the command line. Quote paths containing spaces.
 
@@ -365,6 +389,7 @@ CUE and CHD states cannot be exchanged. If a CHD fails while the original CUE wo
 | View → Fullscreen | Alt+Enter | Toggle fullscreen/windowed mode |
 | View → Input Profiles | Alt+1 through Alt+0 | Select input profile 1–10 while stopped |
 | View → Settings... | — | Open settings |
+| View → Audio | — | Adjust master volume or Mute after saving successfully |
 | View → About rxpce... | — | Show version and credits |
 
 | Additional key | Action |
@@ -449,7 +474,7 @@ XInput displays slot and connection status, such as `XInput 1 (Connected)`, rath
 
 ### 6. Settings and when they apply
 
-`OK` saves settings; `Cancel` discards edits. Except for window scale and aspect ratio, settings apply at the next emulation start. Press Esc and reopen the image. F2/F3/F4/F7 changes take effect immediately during play.
+`OK` saves settings; `Cancel` discards edits. Scale, aspect ratio, all four volume levels and Mute apply after a successful save; other settings apply at the next emulation start. Press Esc and reopen the image. F2/F3/F4/F7 changes take effect immediately during play.
 
 If you select a live value through F2/F3/F4/F7 after saving Settings, that setting's live value takes precedence in later saves. Pending values for other settings are retained.
 
@@ -480,8 +505,15 @@ Both modes use nearest-neighbor sampling. TV scaling is not restricted to source
 | WASAPI (shared) / DirectSound | Output backend; WASAPI is the default |
 | Sample rate (Hz) | 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100 or 48000; default 44100 |
 | Channels | Mono or Stereo; default Stereo |
-| Latency (20-160 ms) | Default 40 ms. Lower values reduce delay; increase it if audio breaks up |
-| DirectSound level | DirectSound only: 0 Write primary, 1 Exclusive, 2 Priority; default 2 |
+| Latency (ms) | 20–160 ms; default 40 ms. Lower values reduce delay; increase it if audio breaks up |
+| DS level (0-2) | DirectSound only: 0 Write primary, 1 Exclusive, 2 Priority; default 2 |
+| Master (%) | Overall volume, 0–100%; default 100 |
+| PSG (%) / CD-DA (%) / ADPCM (%) | Individual source levels, 0–100%; all default to 100 |
+| Mute | Silence all output; off by default. Set a source to 0% to silence it individually |
+
+The four levels and Mute are shared across games and apply after OK successfully saves them. There is no live preview while editing; Cancel or a failed save retains the previous values. `View → Audio` changes master volume by ten points through `Master Volume Up` / `Down`, or toggles `Mute`, after saving successfully. A later menu selection takes precedence over an earlier Settings save. Changing volume while muted does not unmute. If invalid settings were replaced with defaults for startup, repair and save Settings before using the Audio menu.
+
+All levels at 100% with Mute off preserve the previous output. Levels scale amplitude linearly: 50% master and 50% PSG give 25% effective PSG output. Muting keeps internal sound and gameplay running. State loads, resets and replays retain current levels. Changes have an approximately 5 ms smoothing ramp plus the delay of audio already submitted to the output buffer. Enable audio is separate and is not switched on by volume commands.
 
 Mono averages the left and right signals. Audio rate conversion adds a delay separate from the output buffer: about 0.73 ms at 44100 Hz and up to 4 ms at 8000 Hz. Check for dropouts when reducing Latency.
 
@@ -590,7 +622,7 @@ To reset settings only, close the app, rename `rxpce.json` as a backup and resta
 | Game runs too fast | Enable Automatic frame skip with F2 or in Video settings |
 | Gamepad does not respond | Check Input device, Players, enabled backends and Connected status; confirm with OK and reopen the game |
 | Six-button controls do not work | Check game support and each Player's Buttons setting |
-| Settings appear unchanged | Except for scale and aspect ratio, stop with Esc and reopen. F10 Reset does not apply pending settings |
+| Settings appear unchanged | Except for scale, aspect ratio, volume and Mute, stop with Esc and reopen. F10 Reset does not apply pending settings |
 | No audio / broken audio | Check Enable audio and Windows volume/output device; increase Latency and reopen, or try the other backend |
 | Cannot open a CD | Check the supported BIOS/size, referenced BIN files and CHD type; allow validation to complete |
 | Only the CHD fails / audio positions are wrong | Check the original CUE, and whether conversion preserved track positions and pregaps |
