@@ -133,7 +133,7 @@ void HuC6280::reset(const std::array<std::uint8_t, 8>& mapping) {
 }
 void HuC6280::set_irq_lines(std::uint8_t lines) {
     lines &= 7;
-    if (lines & ~state_.irq_lines)
+    if (lines & ~state_.irq_lines & ~state_.irq_mask)
         state_.irq_delay = 1;
     state_.irq_lines = lines;
 }

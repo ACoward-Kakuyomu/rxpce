@@ -1,8 +1,8 @@
-# rxpce 1.5.3
+# rxpce 1.5.3公開後の開発版 / Development build after 1.5.3
 
-rxpce 1.5.3では、CDステート保存、CUE変換、ROM入力検証、設定保存とウィンドウサイズの不具合を修正しました。 **1.5.0／1.5.1／1.5.2のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
+これは1.5.3公開後の開発版です。マスク済みIRQによる受付遅延の干渉を修正し、意味互換性のためステート4種のGUIDを更新しました。 **公開版1.5.3以前のステート・リプレイは読み込めません。** ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。[1.5.3のリリースノート](RELEASE_NOTES.md)は公開時点の履歴です。
 
-rxpce 1.5.3 fixes CD state saving, CUE conversion, ROM validation, settings persistence and window sizing. **Save states from 1.5.0, 1.5.1 and 1.5.2 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
+This is a development build after the 1.5.3 release. It fixes masked IRQ edges delaying eligible requests and updates all four state GUIDs for semantic compatibility. **States and replays from official releases up to 1.5.3 cannot be loaded.** Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. The [1.5.3 release notes](RELEASE_NOTES.md#english) describe the published release.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -18,7 +18,7 @@ PCエンジンエミュレーター **rxpce** の導入案内です。アプリ�
 
 rxpceは、かつて公開されていたxpceをWindows 11向けに改修したPCエンジンエミュレーターです。
 
-1.5.3の主な対応範囲は次のとおりです。
+現在の主な対応範囲は次のとおりです。
 
 | 項目 | 対応内容 |
 | --- | --- |
@@ -70,13 +70,17 @@ README、操作説明書、`LICENSE.md`、`LICENSES`、`THIRD_PARTY_NOTICES.md`�
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.5.3の変更
+### 公開版1.5.3の変更（参考）
 
 CDステートの多階層保存先、記録済みRAWプリギャップの保持、不正ROMサイズの拒否、設定変更後のショートカット保存、メニュー折返し時のウィンドウサイズを修正しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-**正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
+### この開発版への更新
+
+**公開版1.5.3以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
 ### セーブデータと更新
+
+旧ステート・リプレイの自動移行はありません。旧ファイルは自動削除しませんが、同じ保存先へF5で保存すると上書きされます。更新前にバックアップしてください。F11の記録も新規起動から作成してください。
 
 * `rxpce.json`は設定、実行ファイルと同じフォルダーの`backup.dat`は全ゲーム共通の2 KiBバックアップRAMです。
 * ステートとPopulousの`.ram`は、初期設定ではゲームイメージの隣に保存します。保存名・保存先は[操作説明書](MANUAL.md)に記載しています。
@@ -104,7 +108,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.5.3 |
+| Feature | Support in this development build |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -150,13 +154,17 @@ Most settings apply at the **next emulation start**. Press `Esc` and reopen the 
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.5.3
+### Published 1.5.3 changes (historical)
 
 Fixed nested CD state folders, preservation of stored RAW pregaps, invalid ROM size rejection, shortcut persistence after settings changes, and window sizing with wrapped menus. See the [release notes](RELEASE_NOTES.md#english) for details.
 
-**Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
+### Updating to this development build
+
+**States and replays from official releases up to 1.5.3 cannot be loaded.** When updating from one of those builds, start games normally and create new states and recordings. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
 ### Save data and updates
+
+Old states and replays are not migrated or deleted automatically. F5 can overwrite an old state at the same path; back up files before updating. Create F11 recordings from a fresh game start.
 
 `rxpce.json` contains settings. `backup.dat`, beside the executable, is the shared 2 KiB backup RAM. Save states and Populous `.ram` files are stored beside the game image by default; see the [manual](MANUAL.md#english) for naming and locations.
 

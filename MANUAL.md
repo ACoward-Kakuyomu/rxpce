@@ -1,8 +1,8 @@
-# rxpce 1.5.3 操作説明書 / User Manual
+# rxpce 1.5.3公開後の開発版 操作説明書 / Development User Manual
 
-rxpce 1.5.3では、CDステート保存、CUE変換、ROM入力検証、設定保存とウィンドウサイズの不具合を修正しました。 **1.5.0／1.5.1／1.5.2のステートは引き続き読み込めます。正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** ゲーム内セーブと設定も引き続き利用できます。
+これは1.5.3公開後の開発版です。マスク済みIRQによる受付遅延の干渉を修正し、意味互換性のためステート4種のGUIDを更新しました。 **公開版1.5.3以前のステート・リプレイは読み込めません。** ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。[1.5.3のリリースノート](RELEASE_NOTES.md)は公開時点の履歴です。
 
-rxpce 1.5.3 fixes CD state saving, CUE conversion, ROM validation, settings persistence and window sizing. **Save states from 1.5.0, 1.5.1 and 1.5.2 remain compatible. Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** In-game saves and settings remain usable.
+This is a development build after the 1.5.3 release. It fixes masked IRQ edges delaying eligible requests and updates all four state GUIDs for semantic compatibility. **States and replays from official releases up to 1.5.3 cannot be loaded.** Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. The [1.5.3 release notes](RELEASE_NOTES.md#english) describe the published release.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 
@@ -239,6 +239,8 @@ Base clockはCPU基準の進行速度を設定します。映像時計との相�
 
 #### 入力リプレイ
 
+公開版1.5.3以前のステート・リプレイは読み込めません。開始ステートのGUIDも検証するため、リプレイ外側の形式が同じでも旧記録は拒否します。F11で新規起動から記録し直してください。
+
 HuCardまたはCDのプレイ中にF11で記録を開始し、もう一度F11を押して `.rpl` に保存します。保存ダイアログを取り消した場合は、`Game > Replay > Save Pending Recording...` から再試行できます。停止中にF12を押し、リプレイと対応するゲームを選ぶと再生します。再生を中止するにはF12またはEscを押します。
 
 記録時と同じROM、または同じ形式・内容のディスクと同じSystem Card BIOSが必要です。CUEとCHDはそれぞれ別のリプレイとして扱います。再生中は記録された操作を使い、ゲーム内セーブは一時コピーで扱います。共有するリプレイには記録開始時のゲーム内セーブ内容が含まれます。再現に差が出た場合は `rxpce.log` に照合点を記録します。
@@ -258,6 +260,8 @@ HuCardまたはCDのプレイ中にF11で記録を開始し、もう一度F11を
 
 ステートと`.ram`の保存先は`State / RAM folder`に従います。ZIPの保存名はZIP自体の名前を使い、内部PCEの名前は使いません。同じ保存先に同じベース名のPCE/ZIP/CUEを置くとステート名が重複するため、別のフォルダーや名前を使ってください。CUEとCHDは保存名も識別も別で、相互復帰はできません。
 
+旧ステートは自動移行・削除しませんが、同じ保存先へF5で保存すると上書きされます。更新前に旧ステート・リプレイをバックアップし、新規起動から作り直してください。
+
 ゲーム内セーブとステートは別の機能です。ゲーム内で保存したRAMは、Esc停止・ゲーム切替・正常終了の際にファイルへ保存します。強制終了では最新の内容が残らない場合があります。
 
 **F6による復帰は、共有バックアップRAMとPopulous RAMも保存時点へ戻します。** その後に停止・終了すると、戻った内容が永続ファイルに保存されます。共有RAMには他のゲームのセーブも含まれます。新しいセーブを残す場合は、先に正常終了して保存ファイルをバックアップしてください。
@@ -268,7 +272,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-**正式版1.4.0以前、および保存形式が異なる開発版のステートは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+**公開版1.5.3以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
@@ -531,6 +535,8 @@ Base clock sets CPU-based timing relative to the video clock and also affects PS
 
 #### Input replays
 
+States and replays from official releases up to 1.5.3 cannot be loaded. The embedded start-state GUID is checked even though the replay container format is unchanged. Create new F11 recordings from a fresh game start.
+
 Press F11 during HuCard or CD play to start recording, then press it again to save an `.rpl` file. If you cancel the save dialog, use `Game > Replay > Save Pending Recording...` to try again. While emulation is stopped, press F12 and select the replay and matching game. Press F12 or Esc to stop playback.
 
 Playback requires the same ROM, or a disc image with the same format and contents and the same System Card BIOS. CUE and CHD use separate replays. Playback uses the recorded inputs and temporary copies of in-game saves. Shared replays contain the in-game save data present when recording began. If playback diverges, the checkpoint is reported in `rxpce.log`.
@@ -550,6 +556,8 @@ There is **one save-state slot per VDC mode**. F5 overwrites it; F6 restores it.
 
 States and `.ram` files follow `State / RAM folder`. ZIP saves use the ZIP's name, not its internal PCE name. PCE/ZIP/CUE files with the same base name and save folder share a state filename; use distinct names or folders. CUE and CHD have different state names and identities and cannot exchange states.
 
+Old states are not migrated or deleted automatically, but F5 can overwrite them at the same path. Back up old states and replays before updating, then create new ones from a fresh game start.
+
 Game saves and save states are separate features. Game-save RAM is written to disk when stopping with Esc, switching games or exiting normally. A forced termination may lose recent changes.
 
 **F6 also rolls shared backup RAM and Populous RAM back to the saved point.** Stopping or exiting afterward writes the rolled-back data to disk. Shared backup RAM may include other games' saves. To preserve newer saves, exit normally and back up the files first.
@@ -560,7 +568,7 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-**Save states from official releases 1.4.0 and earlier, or development builds with a different state format, cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
+**States and replays from official releases up to 1.5.3 cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 
