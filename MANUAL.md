@@ -1,8 +1,8 @@
-# rxpce 1.5.3公開後の開発版 操作説明書 / Development User Manual
+# rxpce 1.6.0 操作説明書 / User Manual
 
-これは1.5.3公開後の開発版です。マスク済みIRQによる受付遅延の干渉を修正し、意味互換性のためステート4種のGUIDを更新しました。 **公開版1.5.3以前のステート・リプレイは読み込めません。** ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。[1.5.3のリリースノート](RELEASE_NOTES.md)は公開時点の履歴です。
+**公開版1.5.3以前のステート・リプレイは読み込めません。** IRQ受付の修正に伴い、意味互換性のためステート4種のGUIDを更新しています。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[1.6.0のリリースノート](RELEASE_NOTES.md)を参照してください。
 
-This is a development build after the 1.5.3 release. It fixes masked IRQ edges delaying eligible requests and updates all four state GUIDs for semantic compatibility. **States and replays from official releases up to 1.5.3 cannot be loaded.** Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. The [1.5.3 release notes](RELEASE_NOTES.md#english) describe the published release.
+**States and replays from official releases up to 1.5.3 cannot be loaded.** The IRQ handling fix updates all four state GUIDs for semantic compatibility. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See the [1.6.0 release notes](RELEASE_NOTES.md#english) for changes.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 

@@ -1,8 +1,8 @@
-# rxpce 1.5.3公開後の開発版 / Development build after 1.5.3
+# rxpce 1.6.0
 
-これは1.5.3公開後の開発版です。マスク済みIRQによる受付遅延の干渉を修正し、意味互換性のためステート4種のGUIDを更新しました。 **公開版1.5.3以前のステート・リプレイは読み込めません。** ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。[1.5.3のリリースノート](RELEASE_NOTES.md)は公開時点の履歴です。
+**公開版1.5.3以前のステート・リプレイは読み込めません。** IRQ受付の修正に伴い、意味互換性のためステート4種のGUIDを更新しています。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[1.6.0のリリースノート](RELEASE_NOTES.md)を参照してください。
 
-This is a development build after the 1.5.3 release. It fixes masked IRQ edges delaying eligible requests and updates all four state GUIDs for semantic compatibility. **States and replays from official releases up to 1.5.3 cannot be loaded.** Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. The [1.5.3 release notes](RELEASE_NOTES.md#english) describe the published release.
+**States and replays from official releases up to 1.5.3 cannot be loaded.** The IRQ handling fix updates all four state GUIDs for semantic compatibility. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See the [1.6.0 release notes](RELEASE_NOTES.md#english) for changes.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -72,11 +72,11 @@ Explorerからゲーム表示領域へ`.pce`／`.zip`／`.cue`／`.chd`を**1個
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 公開版1.5.3の変更（参考）
+### 1.6.0の主な変更
 
-CDステートの多階層保存先、記録済みRAWプリギャップの保持、不正ROMサイズの拒否、設定変更後のショートカット保存、メニュー折返し時のウィンドウサイズを修正しました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
+全体とPSG／CD-DA／ADPCMの個別音量・Mute、およびPCE／ZIP／CUE／CHDのドラッグ＆ドロップを追加しました。マスク済みIRQによる受付遅延の干渉を修正し、音声初期化失敗の通知とセッション開始時のFPS集計も整えました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-### この開発版への更新
+### 1.6.0への更新
 
 **公開版1.5.3以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
@@ -110,7 +110,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in this development build |
+| Feature | Support in 1.6.0 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -158,11 +158,11 @@ You can also drop **one** `.pce`, `.zip`, `.cue` or `.chd` from Explorer onto th
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Published 1.5.3 changes (historical)
+### Changes in 1.6.0
 
-Fixed nested CD state folders, preservation of stored RAW pregaps, invalid ROM size rejection, shortcut persistence after settings changes, and window sizing with wrapped menus. See the [release notes](RELEASE_NOTES.md#english) for details.
+Added master and individual PSG/CD-DA/ADPCM volume controls, Mute, and PCE/ZIP/CUE/CHD drag and drop. Fixed masked IRQ delay interference, added audio initialization failure notifications, and reset FPS accounting at each session start. See the [release notes](RELEASE_NOTES.md#english) for details.
 
-### Updating to this development build
+### Updating to 1.6.0
 
 **States and replays from official releases up to 1.5.3 cannot be loaded.** When updating from one of those builds, start games normally and create new states and recordings. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
