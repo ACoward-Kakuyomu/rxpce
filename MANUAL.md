@@ -187,6 +187,8 @@ Settings保存後にF2/F3/F4/F7で実行中の値を選び直すと、その項�
 
 Monoは左右の音声の平均です。音声のレート変換による遅延が出力バッファとは別に加わります。追加分は44100 Hzで約0.73 ms、8000 Hzで最大4 msです。Latencyを小さくする場合は、音切れがないか確認してください。
 
+音声を有効にした状態で出力の初期化に失敗した場合は、`Audio output unavailable` と使用方式を表示します。ゲームは無音で続行し、音源の内部処理と設定は維持します。`Settings > Audio` とWindowsの音声デバイスを確認し、Escで停止してゲームを開き直してください。明示的に音声を無効にした場合は警告しません。実行途中のデバイス切断の自動復旧には対応していません。
+
 #### Input
 
 ゲームごとに使い分ける入力設定を10枠まで保存できます。ゲームを実行中ならEscで停止し、`View > Input Profiles` または `Alt+1`〜`Alt+0` で選びます。`Alt+0` はスロット10です。選択中の枠にはチェックが付き、次回起動時にも復元されます。未使用枠を初めて選ぶと、直前の枠の入力設定がコピーされます。
@@ -482,6 +484,8 @@ Both modes use nearest-neighbor sampling. TV scaling is not restricted to source
 | DirectSound level | DirectSound only: 0 Write primary, 1 Exclusive, 2 Priority; default 2 |
 
 Mono averages the left and right signals. Audio rate conversion adds a delay separate from the output buffer: about 0.73 ms at 44100 Hz and up to 4 ms at 8000 Hz. Check for dropouts when reducing Latency.
+
+If enabled audio output fails to initialize, `Audio output unavailable` identifies the backend. The game continues silently while internal sound processing and settings are preserved. Check `Settings > Audio` and your Windows audio device, press Esc to stop, and reopen the game. Disabling audio intentionally does not show a warning. Automatic recovery from a device disconnected during gameplay is not supported.
 
 #### Input
 

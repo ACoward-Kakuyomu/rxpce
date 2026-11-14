@@ -30,6 +30,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_APP + 10, OnMemorySearchReady)
     MESSAGE_HANDLER(WM_APP + 11, OnMemorySearchClosed)
     MESSAGE_HANDLER(WM_APP + 12, OnCheatOperation)
+    MESSAGE_HANDLER(WM_APP + 13, OnAudioUnavailable)
     COMMAND_ID_HANDLER(IDC_MEMORY_SEARCH, OnMemorySearch)
     COMMAND_ID_HANDLER(IDC_MEMORY_CHEATS, OnMemorySearch)
     COMMAND_RANGE_HANDLER(IDC_EXIT, IDC_STOP, OnCommand)
@@ -56,6 +57,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     std::unique_ptr<rxpce_config::DialogInputScope> m_memorySearchInput;
     bool m_memorySearchRequested = false;
     unsigned m_generation = 0;
+    unsigned m_audioWarningGeneration = 0;
     bool m_stopping = false;
     bool m_preparing = false, m_closeAfterPrepare = false;
     std::atomic_bool m_cancelPrepare{false};
@@ -115,4 +117,5 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     LRESULT OnVideoSize(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnVideoDpiChanged(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnMainLoopExited(UINT, WPARAM, LPARAM, BOOL&);
+    LRESULT OnAudioUnavailable(UINT, WPARAM, LPARAM, BOOL&);
 };

@@ -125,7 +125,11 @@ unsigned __stdcall CMainFrame::InvokeMainLoop(void* parameter) {
         if (FAILED(apartment.status))
             throw std::runtime_error("Cannot initialize emulation thread COM apartment");
         result = rxpce_host::RunEmulation(rxpce_paths::executable().parent_path() / L"backup.dat",
-                                         start->frame->m_replay.get(), start->frame->m_cheats.get());
+            start->frame->m_replay.get(), start->frame->m_cheats.get(),
+            [window = start->frame->m_hWnd, generation = start->generation]
+            (rxpce_audio::OutputBackend backend) {
+                ::PostMessage(window, WM_APP + 13, generation, static_cast<LPARAM>(backend));
+            });
     } catch (const std::exception& error) {
         LogDump("Emulation start failed: %s\n", error.what());
     }
@@ -211,6 +215,26 @@ LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
 LRESULT CMainFrame::OnMainLoopExited(UINT, WPARAM generation, LPARAM, BOOL&) {
     if (generation == m_generation)
         StopEmulation();
+    return 0;
+}
+LRESULT CMainFrame::OnAudioUnavailable(UINT, WPARAM generation, LPARAM backend, BOOL&) {
+    if (generation != m_generation || !m_thread || m_stopping ||
+        m_audioWarningGeneration == generation)
+        return 0;
+    const auto output = static_cast<rxpce_audio::OutputBackend>(backend);
+    if (output != rxpce_audio::OutputBackend::wasapi &&
+        output != rxpce_audio::OutputBackend::directsound)
+        return 0;
+    m_audioWarningGeneration = static_cast<unsigned>(generation);
+    const char* message = output == rxpce_audio::OutputBackend::wasapi
+        ? "WASAPI audio output could not be initialized.\n\n"
+          "The game will continue without audio output.\n"
+          "Check Settings > Audio and your Windows audio device, then stop and reopen the game."
+        : "DirectSound audio output could not be initialized.\n\n"
+          "The game will continue without audio output.\n"
+          "Check Settings > Audio and your Windows audio device, then stop and reopen the game.";
+    rxpce_config::DialogInputScope input;
+    MessageBox(message, "Audio output unavailable", MB_OK | MB_ICONWARNING);
     return 0;
 }
 LRESULT CMainFrame::OnDestroy(UINT, WPARAM, LPARAM, BOOL&) {

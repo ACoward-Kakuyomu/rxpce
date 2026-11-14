@@ -9,6 +9,7 @@
 #include "info.h"
 #include "video.h"
 #include "frame_timing.h"
+#include "log.h"
 #include <mmsystem.h>
 #include <vector>
 #include <new>
@@ -17,11 +18,15 @@ namespace rxpce_host {
 RuntimeSettings runtime;
 namespace {
 std::vector<rxpce_video::Pixel> pixels;
+DWORD fps_start = 0;
+unsigned fps_frames = 0;
+int current_fps = 0;
 }
 rxpce_machine::FrameSurface HostFrame() {
     return {pixels.data(), pixels.size()};
 }
-bool InitializeHost(rxpce_machine::Machine& machine) {
+bool InitializeHost(rxpce_machine::Machine& machine,
+                    const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable) {
     InitializeInput();
     TRACE("Initializing Hardware\n");
     try {
@@ -32,9 +37,18 @@ bool InitializeHost(rxpce_machine::Machine& machine) {
     InitializeFrameTiming(rxpce_video::vce_line_ticks * 262, rxpce_video::video_master_hz);
     auto sound = rxpce_host::runtime.sound;
     sound.base_clock_hz = machine.cpu_clock_hz;
-    InitSound(sound, hwnd, rxpce_audio::snapshot_psg(machine.io));
+    const bool sound_ready = InitSound(sound, hwnd, rxpce_audio::snapshot_psg(machine.io));
     InitDInput();
     InitInfo();
+    fps_start = timeGetTime();
+    fps_frames = 0;
+    current_fps = 0;
+    if (!sound_ready && sound.enabled) {
+        LogDump("Audio output initialization failed: backend=%s; continuing without audio output\n",
+                sound.backend == rxpce_audio::OutputBackend::wasapi ? "WASAPI" : "DirectSound");
+        if (audio_unavailable)
+            audio_unavailable(sound.backend);
+    }
     return true;
 }
 void ShutdownHost() {
@@ -49,19 +63,16 @@ void PresentFrame(rxpce_machine::FrameSurface frame, rxpce_machine::DisplayRecta
     if ((bFullScreen && !bActiveApp) || area.width == 0 || !frame.pixels ||
         frame.count < rxpce_machine::frame_width * rxpce_machine::frame_height)
         return;
-    static DWORD old_time = 0;
-    static unsigned frames = 0;
-    static int fps = 0;
     const auto time = timeGetTime();
-    ++frames;
-    const auto span = time - old_time;
+    ++fps_frames;
+    const auto span = time - fps_start;
     if (span > 500) {
-        fps = static_cast<int>((frames * 1000 + span / 2) / span);
-        frames = 0;
-        old_time = time;
+        current_fps = static_cast<int>((std::uint64_t(fps_frames) * 1000 + span / 2) / span);
+        fps_frames = 0;
+        fps_start = time;
     }
     if (rxpce_host::runtime.show_fps)
-        SetInfoFps(fps);
+        SetInfoFps(current_fps);
     PresentVideo(frame.pixels, rxpce_machine::frame_width, rxpce_machine::frame_height, area.x,
                  area.y, area.width, area.height, !rxpce_host::runtime.auto_frame_skip.load());
 }

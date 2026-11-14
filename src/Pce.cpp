@@ -530,7 +530,8 @@ static void TrashPCE(const std::filesystem::path& backmemname, bool replaying) {
 }
 
 int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
-                            rxpce_replay::Session* session, rxpce_cheats::Session* cheats_session) {
+                            rxpce_replay::Session* session, rxpce_cheats::Session* cheats_session,
+                            const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable) {
     rxpce_replay::Session normal;
     auto& replay = session ? *session : normal;
     rxpce_cheats::Session normal_cheats;
@@ -555,7 +556,7 @@ int rxpce_host::RunEmulation(const std::filesystem::path& backup_file,
         LogDumpDetail("Emulation clock=%u period=%d\n", machine.cpu_clock_hz,
                       machine.line_period);
         machine.timer_period = 1024;
-        if (rxpce_host::InitializeHost(machine)) {
+        if (rxpce_host::InitializeHost(machine, audio_unavailable)) {
             core_started = true;
             if (InitPCE(backup_file, source != nullptr) == 0) {
                 SetInfoString("Emulation started");
