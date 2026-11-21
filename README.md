@@ -1,8 +1,12 @@
 # rxpce 1.6.0
 
-**公開版1.5.3以前のステート・リプレイは読み込めません。** IRQ受付の修正に伴い、意味互換性のためステート4種のGUIDを更新しています。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[1.6.0のリリースノート](RELEASE_NOTES.md)を参照してください。
+この作業ツリーは1.6.0公開後の開発版です。以下の互換性情報はこの開発版に適用されます。
 
-**States and replays from official releases up to 1.5.3 cannot be loaded.** The IRQ handling fix updates all four state GUIDs for semantic compatibility. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See the [1.6.0 release notes](RELEASE_NOTES.md#english) for changes.
+This working tree is a development build after v1.6.0. The compatibility notice below applies to this development build.
+
+**公開版1.6.0以前のステート・リプレイは読み込めません。** PHP・SEIの修正に伴い、意味互換性のためステート4種のGUIDを更新しています。この変更前の開発版で作成したファイルも対象です。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[開発中の変更とリリースノート](RELEASE_NOTES.md)を参照してください。
+
+**States and replays from official releases up to 1.6.0 cannot be loaded.** The PHP/SEI fixes update all four state GUIDs for semantic compatibility. Files created by development builds before this change are also incompatible. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See [development changes and release notes](RELEASE_NOTES.md) for details.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -76,9 +80,9 @@ Explorerからゲーム表示領域へ`.pce`／`.zip`／`.cue`／`.chd`を**1個
 
 全体とPSG／CD-DA／ADPCMの個別音量・Mute、およびPCE／ZIP／CUE／CHDのドラッグ＆ドロップを追加しました。マスク済みIRQによる受付遅延の干渉を修正し、音声初期化失敗の通知とセッション開始時のFPS集計も整えました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-### 1.6.0への更新
+### 開発版への更新
 
-**公開版1.5.3以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
+**公開版1.6.0以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
 ### セーブデータと更新
 
@@ -162,9 +166,9 @@ Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F
 
 Added master and individual PSG/CD-DA/ADPCM volume controls, Mute, and PCE/ZIP/CUE/CHD drag and drop. Fixed masked IRQ delay interference, added audio initialization failure notifications, and reset FPS accounting at each session start. See the [release notes](RELEASE_NOTES.md#english) for details.
 
-### Updating to 1.6.0
+### Updating to this development build
 
-**States and replays from official releases up to 1.5.3 cannot be loaded.** When updating from one of those builds, start games normally and create new states and recordings. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
+**States and replays from official releases up to 1.6.0 cannot be loaded.** When updating from one of those builds, start games normally and create new states and recordings. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 
 ### Save data and updates
 

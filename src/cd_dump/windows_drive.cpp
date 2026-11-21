@@ -144,8 +144,6 @@ Bytes WindowsDrive::execute(const Bytes& command, unsigned expected) {
     return Bytes(begin, begin + s.DataTransferLength);
 }
 std::string WindowsDrive::inquiry() {
-    const auto bytes = execute({0x12,0,0,0,96,0}, 96);
-    if (bytes.size() < 36 || (bytes[0] & 31) != 5) throw std::runtime_error("Device is not an optical drive");
-    return std::string(bytes.begin() + 8, bytes.begin() + 36);
+    return read_inquiry(*this);
 }
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <stdexcept>
 
 namespace rxpce_audio {
 // Output-only data, excluded from all machine/audio snapshots.
@@ -34,6 +35,8 @@ class OutputGain {
         return true;
     }
     void configure(unsigned rate) {
+        if (rate < 1000 || rate > 192000)
+            throw std::invalid_argument("Invalid output gain rate");
         rate_ = rate;
         for (auto& ramp : ramps_) { ramp.value = ramp.target; ramp.remaining = 0; ramp.step = 0; }
     }

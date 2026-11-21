@@ -1,8 +1,12 @@
 # rxpce 1.6.0 操作説明書 / User Manual
 
-**公開版1.5.3以前のステート・リプレイは読み込めません。** IRQ受付の修正に伴い、意味互換性のためステート4種のGUIDを更新しています。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[1.6.0のリリースノート](RELEASE_NOTES.md)を参照してください。
+この作業ツリーは1.6.0公開後の開発版です。以下の互換性情報はこの開発版に適用されます。
 
-**States and replays from official releases up to 1.5.3 cannot be loaded.** The IRQ handling fix updates all four state GUIDs for semantic compatibility. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See the [1.6.0 release notes](RELEASE_NOTES.md#english) for changes.
+This working tree is a development build after v1.6.0. The compatibility notice below applies to this development build.
+
+**公開版1.6.0以前のステート・リプレイは読み込めません。** PHP・SEIの修正に伴い、意味互換性のためステート4種のGUIDを更新しています。この変更前の開発版で作成したファイルも対象です。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[開発中の変更とリリースノート](RELEASE_NOTES.md)を参照してください。
+
+**States and replays from official releases up to 1.6.0 cannot be loaded.** The PHP/SEI fixes update all four state GUIDs for semantic compatibility. Files created by development builds before this change are also incompatible. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See [development changes and release notes](RELEASE_NOTES.md) for details.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 
@@ -203,7 +207,7 @@ Settings保存後にF2/F3/F4/F7で実行中の値を選び直すと、その項�
 
 Monoは左右の音声の平均です。音声のレート変換による遅延が出力バッファとは別に加わります。追加分は44100 Hzで約0.73 ms、8000 Hzで最大4 msです。Latencyを小さくする場合は、音切れがないか確認してください。
 
-音声を有効にした状態で出力の初期化に失敗した場合は、`Audio output unavailable` と使用方式を表示します。ゲームは無音で続行し、音源の内部処理と設定は維持します。`Settings > Audio` とWindowsの音声デバイスを確認し、Escで停止してゲームを開き直してください。明示的に音声を無効にした場合は警告しません。実行途中のデバイス切断の自動復旧には対応していません。
+音声を有効にした状態で出力の初期化に失敗した場合や、DirectSoundの出力が復旧できず停止した場合は、`Audio output unavailable` と使用方式を表示します。ゲームは無音で続行し、音源の内部処理と設定は維持します。`Settings > Audio` とWindowsの音声デバイスを確認し、Escで停止してゲームを開き直してください。明示的に音声を無効にした場合は警告しません。DirectSoundの一時的なバッファ喪失は復旧を試みますが、切断したデバイスの再接続による自動復旧は保証しません。
 
 #### Input
 
@@ -257,7 +261,7 @@ Base clockはCPU基準の進行速度を設定します。映像時計との相�
 
 #### 入力リプレイ
 
-公開版1.5.3以前のステート・リプレイは読み込めません。開始ステートのGUIDも検証するため、リプレイ外側の形式が同じでも旧記録は拒否します。F11で新規起動から記録し直してください。
+公開版1.6.0以前のステート・リプレイは読み込めません。開始ステートのGUIDも検証するため、リプレイ外側の形式が同じでも旧記録は拒否します。F11で新規起動から記録し直してください。
 
 HuCardまたはCDのプレイ中にF11で記録を開始し、もう一度F11を押して `.rpl` に保存します。保存ダイアログを取り消した場合は、`Game > Replay > Save Pending Recording...` から再試行できます。停止中にF12を押し、リプレイと対応するゲームを選ぶと再生します。再生を中止するにはF12またはEscを押します。
 
@@ -290,7 +294,7 @@ CDの復帰には同じBIOS・同じディスク・同じ構成が必要です�
 
 ### 8. 更新・設定の初期化
 
-**公開版1.5.3以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
+**公開版1.6.0以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動して新しいステートを作成してください。変更点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
 転送途中の保存・復帰とHuCardのPSG位相保存に対応し、ステートはHuCard/CD別の固定GUIDで形式を識別します。VDC DMA・CPUのVRAM保留アクセス・VCE位相の保存に伴いHuCard/CDの形式GUIDを更新しています。異なるGUIDのステートは復帰できません。`backup.dat`と`.ram`のゲーム内セーブは引き続き利用できます。
 
@@ -517,7 +521,7 @@ All levels at 100% with Mute off preserve the previous output. Levels scale ampl
 
 Mono averages the left and right signals. Audio rate conversion adds a delay separate from the output buffer: about 0.73 ms at 44100 Hz and up to 4 ms at 8000 Hz. Check for dropouts when reducing Latency.
 
-If enabled audio output fails to initialize, `Audio output unavailable` identifies the backend. The game continues silently while internal sound processing and settings are preserved. Check `Settings > Audio` and your Windows audio device, press Esc to stop, and reopen the game. Disabling audio intentionally does not show a warning. Automatic recovery from a device disconnected during gameplay is not supported.
+If enabled audio output fails to initialize, or DirectSound output stops after an unrecoverable failure, `Audio output unavailable` identifies the backend. The game continues silently while internal sound processing and settings are preserved. Check `Settings > Audio` and your Windows audio device, press Esc to stop, and reopen the game. Disabling audio intentionally does not show a warning. DirectSound attempts to recover temporary buffer loss; automatic recovery after reconnecting a disconnected device is not guaranteed.
 
 #### Input
 
@@ -571,7 +575,7 @@ Base clock sets CPU-based timing relative to the video clock and also affects PS
 
 #### Input replays
 
-States and replays from official releases up to 1.5.3 cannot be loaded. The embedded start-state GUID is checked even though the replay container format is unchanged. Create new F11 recordings from a fresh game start.
+States and replays from official releases up to 1.6.0 cannot be loaded. The embedded start-state GUID is checked even though the replay container format is unchanged. Create new F11 recordings from a fresh game start.
 
 Press F11 during HuCard or CD play to start recording, then press it again to save an `.rpl` file. If you cancel the save dialog, use `Game > Replay > Save Pending Recording...` to try again. While emulation is stopped, press F12 and select the replay and matching game. Press F12 or Esc to stop playback.
 
@@ -604,7 +608,7 @@ CD restoration requires the same BIOS, disc and configuration. Changing player c
 
 ### 8. Updating and resetting settings
 
-**States and replays from official releases up to 1.5.3 cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
+**States and replays from official releases up to 1.6.0 cannot be loaded.** When updating from one of those builds, start games normally and create new states. See the [release notes](RELEASE_NOTES.md#english) for changes.
 
 Save states support resumable block transfers and HuCard PSG phase restoration. Separate fixed format GUIDs identify HuCard and CD states. HuCard and CD format GUIDs were updated to store VDC DMA, pending CPU VRAM accesses and VCE phase. States with different GUIDs cannot be loaded. In-game saves in `backup.dat` and `.ram` remain usable.
 

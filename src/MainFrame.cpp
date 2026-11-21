@@ -30,13 +30,18 @@ struct OpeningScope {
 };
 }
 
-void CMainFrame::ShowFailure(const char* detail, const char* title) {
+int CMainFrame::ShowMessage(const char* detail, const char* title, UINT flags) {
+    int result = 0;
     {
         rxpce_config::DialogInputScope input;
         ::SetCursor(::LoadCursor(nullptr, IDC_ARROW));
-        MessageBox(detail, title, MB_OK | MB_ICONERROR);
+        result = MessageBox(detail, title, flags);
     }
     RefreshCursor();
+    return result;
+}
+void CMainFrame::ShowFailure(const char* detail, const char* title) {
+    ShowMessage(detail, title, MB_OK | MB_ICONERROR);
 }
 LRESULT CMainFrame::OnCreate(UINT, WPARAM, LPARAM, BOOL&) {
     hwnd = m_hWnd;
@@ -73,6 +78,14 @@ LRESULT CMainFrame::OnCreate(UINT, WPARAM, LPARAM, BOOL&) {
     return 0;
 }
 BOOL CMainFrame::OnIdle() {
+    if (m_memorySearchEnablePending && !rxpce_config::dialog_open) {
+        m_memorySearchEnablePending = false;
+        if (IsWindow()) EnableWindow(TRUE);
+    }
+    if (m_memorySearchReadyPending && !rxpce_config::dialog_open) {
+        BOOL handled = FALSE;
+        OnMemorySearchReady(WM_APP + 10, 0, 0, handled);
+    }
     UpdateDropAcceptance();
     UpdateAudioMenu();
     const bool ready = MachineCommands().ready();
@@ -85,7 +98,7 @@ BOOL CMainFrame::OnIdle() {
         ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (ready ? MF_ENABLED : MF_GRAYED));
     for (const UINT id : {IDC_RESET, IDC_SAVE, IDC_LOAD})
         ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (ready && !replay_busy ? MF_ENABLED : MF_GRAYED));
-    ::EnableMenuItem(m_menu, IDC_OPEN, MF_BYCOMMAND | (replay_busy ? MF_GRAYED : MF_ENABLED));
+    ::EnableMenuItem(m_menu, IDC_OPEN, MF_BYCOMMAND | (replay_busy || m_memorySearchRequested ? MF_GRAYED : MF_ENABLED));
     const bool playback = m_replay && m_replay->source();
     ::EnableMenuItem(m_menu, IDC_REPLAY_RECORD,
                      MF_BYCOMMAND | (ready && !playback && !m_pendingRecording &&
@@ -96,7 +109,8 @@ BOOL CMainFrame::OnIdle() {
         ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (m_pendingRecording ? MF_ENABLED : MF_GRAYED));
     ::EnableMenuItem(m_menu, IDC_ZOOM1,
                      MF_BYCOMMAND | (bFullScreen.load() ? MF_GRAYED : MF_ENABLED));
-    ::EnableMenuItem(m_menu, IDC_SETTINGS, MF_BYCOMMAND | MF_ENABLED);
+    for (const UINT id : {IDC_SETTINGS, IDC_ABOUT})
+        ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | (m_memorySearchRequested ? MF_GRAYED : MF_ENABLED));
     const UINT profile_state = CanSelectInputProfile() ? MF_ENABLED : MF_GRAYED;
     for (UINT id = IDC_INPUT_PROFILE_FIRST; id <= IDC_INPUT_PROFILE_LAST; ++id)
         ::EnableMenuItem(m_menu, id, MF_BYCOMMAND | profile_state);
@@ -195,7 +209,9 @@ void CMainFrame::StopMainLoop() {
         m_stopping = true;
         LogDumpDetail("Stopping emulation worker\n");
         RequestMachineStop();
-        CloseMemorySearch();
+    }
+    CloseMemorySearch();
+    if (m_thread) {
         rxpce_ui::wait_for_thread(m_thread.get());
         LogDumpDetail("Emulation worker stopped\n");
         m_thread.reset();
@@ -211,6 +227,8 @@ LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
         DeferMemoryTools(WM_CLOSE);
         return 0;
     }
+    if (m_memorySearchRequested)
+        CloseMemorySearch();
     if (m_preparing) {
         m_closing=true;
         m_cancelPrepare = true;
@@ -224,8 +242,7 @@ LRESULT CMainFrame::OnClose(UINT, WPARAM, LPARAM, BOOL& handled) {
             StopEmulation(false);
         CollectFinishedReplay();
         if (m_pendingRecording) {
-            rxpce_config::DialogInputScope input;
-            const int choice = MessageBox("Save the pending replay before exiting?",
+            const int choice = ShowMessage("Save the pending replay before exiting?",
                                           "Replay recording", MB_YESNOCANCEL | MB_ICONQUESTION);
             if (choice == IDCANCEL || (choice == IDYES && !SavePendingReplay())) {
                 m_closing=false;
@@ -253,14 +270,13 @@ LRESULT CMainFrame::OnAudioUnavailable(UINT, WPARAM generation, LPARAM backend, 
         return 0;
     m_audioWarningGeneration = static_cast<unsigned>(generation);
     const char* message = output == rxpce_audio::OutputBackend::wasapi
-        ? "WASAPI audio output could not be initialized.\n\n"
+        ? "WASAPI audio output could not be started or has stopped.\n\n"
           "The game will continue without audio output.\n"
           "Check Settings > Audio and your Windows audio device, then stop and reopen the game."
-        : "DirectSound audio output could not be initialized.\n\n"
+        : "DirectSound audio output could not be started or has stopped.\n\n"
           "The game will continue without audio output.\n"
           "Check Settings > Audio and your Windows audio device, then stop and reopen the game.";
-    rxpce_config::DialogInputScope input;
-    MessageBox(message, "Audio output unavailable", MB_OK | MB_ICONWARNING);
+    ShowMessage(message, "Audio output unavailable", MB_OK | MB_ICONWARNING);
     return 0;
 }
 LRESULT CMainFrame::OnDestroy(UINT, WPARAM, LPARAM, BOOL&) {
@@ -351,8 +367,14 @@ void CMainFrame::UpdateRecentGamesMenu() {
         ::AppendMenuW(menu, MF_STRING | MF_GRAYED, IDC_RECENT_GAME_EMPTY, L"(No recent games)");
     for (std::size_t index = 0; index < recent.size(); ++index) {
         auto path = rxpce_config::to_wide(recent[index]);
-        if (path.size() > 100)
-            path = L"..." + path.substr(path.size() - 97);
+        if (path.size() > 100) {
+            auto first = path.size() - 97;
+            // Omit the whole pair if the bounded suffix would start with its low half.
+            if (path[first] >= 0xdc00 && path[first] <= 0xdfff &&
+                path[first - 1] >= 0xd800 && path[first - 1] <= 0xdbff)
+                ++first;
+            path = L"..." + path.substr(first);
+        }
         std::wstring label;
         for (const auto ch : path) {
             if (ch == L'&')
@@ -369,6 +391,7 @@ void CMainFrame::UpdateRecentGamesMenu() {
     ::EnableMenuItem(m_menu, IDC_CLEAR_GAME_PROFILE, MF_BYCOMMAND | (can_clear ? MF_ENABLED : MF_GRAYED));
 }
 LRESULT CMainFrame::OnGameHistory(WORD, WORD id, HWND, BOOL&) {
+    if (m_memorySearchRequested) return 0;
     if (m_memorySearchDialog && m_memorySearchDialog->IsWindow()) {
         DeferMemoryTools(WM_COMMAND, id);
         return 0;
@@ -410,9 +433,22 @@ LRESULT CMainFrame::OnMemorySearch(WORD, WORD id, HWND, BOOL&) {
     return 0;
 }
 LRESULT CMainFrame::OnMemorySearchReady(UINT, WPARAM, LPARAM, BOOL&) {
+    if (m_memorySearchDialog)
+        return 0; // A duplicate notification must not consume or resume a live pause.
+    if (!m_memorySearchRequested || m_closing || m_stopping || m_preparing) {
+        m_memorySearchReadyPending = false;
+        m_memorySearchRequested = false;
+        rxpce_search::pause_channel().resume();
+        return 0;
+    }
+    if (rxpce_config::dialog_open) {
+        m_memorySearchReadyPending = true;
+        return 0; // OnIdle will consume it once, after the native modal loop ends.
+    }
+    m_memorySearchReadyPending = false;
     auto snapshot = rxpce_search::pause_channel().take();
     if (!snapshot) {
-        m_memorySearchRequested = false;
+        // An old queued notification can precede publication for a newer request.
         return 0;
     }
     try {
@@ -444,7 +480,9 @@ LRESULT CMainFrame::OnMemorySearchReady(UINT, WPARAM, LPARAM, BOOL&) {
         const auto dialog = m_memorySearchDialog->Create(m_hWnd);
         if (!dialog || !::IsWindow(dialog))
             throw std::runtime_error("Cannot create Memory Search window");
-        EnableWindow(FALSE);
+        m_memorySearchDisabledOwner = IsWindowEnabled() != FALSE;
+        if (m_memorySearchDisabledOwner)
+            EnableWindow(FALSE);
         ::ShowWindow(dialog, SW_SHOW);
         ::SetForegroundWindow(dialog);
         LogDumpDetail("Memory Search paused: candidates=%zu\n", m_memorySearch.candidates().size());
@@ -457,14 +495,20 @@ LRESULT CMainFrame::OnMemorySearchReady(UINT, WPARAM, LPARAM, BOOL&) {
 void CMainFrame::CloseMemorySearch() {
     m_memorySearchToken = 0;
     m_afterMemoryTools.reset();
-    const bool had_dialog = bool(m_memorySearchDialog);
+    const bool restore_owner = m_memorySearchDisabledOwner;
+    m_memorySearchDisabledOwner = false;
     if (m_memorySearchDialog && m_memorySearchDialog->IsWindow())
         m_memorySearchDialog->DestroyWindow();
     m_memorySearchDialog.reset();
     m_memorySearchInput.reset();
     m_memorySearchRequested = false;
-    if (had_dialog)
-        EnableWindow(TRUE);
+    m_memorySearchReadyPending = false;
+    if (restore_owner) {
+        if (rxpce_config::dialog_open)
+            m_memorySearchEnablePending = true;
+        else if (IsWindow())
+            EnableWindow(TRUE);
+    }
     rxpce_search::pause_channel().resume();
 }
 LRESULT CMainFrame::OnCheatOperation(UINT, WPARAM, LPARAM, BOOL&) {
@@ -521,15 +565,14 @@ bool CMainFrame::SavePendingReplay() {
     const auto path = ChooseReplayPath(true);
     if (path.empty())
         return false;
-    rxpce_config::DialogInputScope input;
     std::error_code exists_error;
     const bool replace = std::filesystem::exists(path, exists_error);
-    if (replace && MessageBox("Replace the existing replay file?", "Save Replay",
+    if (replace && ShowMessage("Replace the existing replay file?", "Save Replay",
                               MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES)
         return false;
     std::string error;
     if (!rxpce_replay::save_file(path, *m_pendingRecording, replace, error)) {
-        MessageBox(error.c_str(), "Cannot save replay", MB_OK | MB_ICONERROR);
+        ShowMessage(error.c_str(), "Cannot save replay", MB_OK | MB_ICONERROR);
         return false;
     }
     m_pendingRecording.reset();
@@ -554,7 +597,7 @@ void CMainFrame::PlayReplay() {
     auto recording = std::make_shared<rxpce_replay::Recording>();
     std::string error;
     if (!rxpce_replay::load_file(path, *recording, error)) {
-        MessageBox(error.c_str(), "Cannot open replay", MB_OK | MB_ICONERROR);
+        ShowMessage(error.c_str(), "Cannot open replay", MB_OK | MB_ICONERROR);
         return;
     }
     const auto media = ChooseMediaPath();
@@ -562,6 +605,7 @@ void CMainFrame::PlayReplay() {
         LoadMediaPath(media, std::move(recording));
 }
 LRESULT CMainFrame::OnReplayCommand(WORD, WORD id, HWND, BOOL&) {
+    if (m_memorySearchRequested) return 0;
     if (m_memorySearchDialog && m_memorySearchDialog->IsWindow()) return 0;
     if (m_preparing || m_stopping || rxpce_config::dialog_open)
         return 0;
@@ -575,7 +619,7 @@ LRESULT CMainFrame::OnReplayCommand(WORD, WORD id, HWND, BOOL&) {
         else if (id == IDC_REPLAY_SAVE)
             SavePendingReplay();
         else if (id == IDC_REPLAY_DISCARD && m_pendingRecording &&
-                 MessageBox("Discard the pending replay?", "Replay recording",
+                 ShowMessage("Discard the pending replay?", "Replay recording",
                             MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) == IDYES)
             m_pendingRecording.reset();
     } catch (const std::exception& error) {
@@ -602,7 +646,7 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
         try {
             return LoadPceFile(std::filesystem::path(path), std::move(playback));
         } catch (const std::exception& ex) {
-            MessageBox(ex.what(), "Cannot load ROM / ZIP", MB_OK | MB_ICONERROR);
+            ShowMessage(ex.what(), "Cannot load ROM / ZIP", MB_OK | MB_ICONERROR);
             return FALSE;
         }
     }
@@ -639,7 +683,7 @@ BOOL CMainFrame::LoadMediaPath(const std::wstring& path,
     }
     if (!ready) {
         if (!m_cancelPrepare)
-            MessageBox(error.c_str(), "Cannot load CD image", MB_OK | MB_ICONERROR);
+            ShowMessage(error.c_str(), "Cannot load CD image", MB_OK | MB_ICONERROR);
         return FALSE;
     }
     StopMainLoop();
@@ -708,7 +752,7 @@ BOOL CMainFrame::LoadPceFile(const std::filesystem::path& path,
     rxpce_rom::Cartridge image;
     std::string error;
     if (!rxpce_rom::load(absolute, image, error)) {
-        MessageBox(error.c_str(), "Cannot load ROM / ZIP", MB_OK | MB_ICONERROR);
+        ShowMessage(error.c_str(), "Cannot load ROM / ZIP", MB_OK | MB_ICONERROR);
         return FALSE;
     }
     const auto source = image.source_path;
@@ -742,6 +786,9 @@ LRESULT CMainFrame::OnCommand(WORD, WORD id, HWND, BOOL&) {
         if (id == IDC_OPEN || id == IDC_STOP || id == IDC_EXIT) DeferMemoryTools(WM_COMMAND, id);
         return 0;
     }
+    if (rxpce_config::dialog_open ||
+        (m_memorySearchRequested && id != IDC_STOP && id != IDC_EXIT))
+        return 0;
     try {
 
         if (m_preparing)
@@ -804,6 +851,12 @@ LRESULT CMainFrame::OnVideoSize(UINT, WPARAM width, LPARAM height, BOOL&) {
     ResizeVideoWindow(static_cast<int>(width), static_cast<int>(height));
     return 0;
 }
+LRESULT CMainFrame::OnWindowSize(UINT, WPARAM size, LPARAM, BOOL& handled) {
+    if (size == SIZE_RESTORED || size == SIZE_MAXIMIZED)
+        RestoreVideoWindowSize();
+    handled = FALSE; // Preserve the frame's normal layout handling.
+    return 0;
+}
 LRESULT CMainFrame::OnVideoDpiChanged(UINT, WPARAM, LPARAM position, BOOL&) {
     const RECT& r = *reinterpret_cast<const RECT*>(position);
     ::SetWindowPos(m_hWnd, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
@@ -814,7 +867,7 @@ LRESULT CMainFrame::OnVideoDpiChanged(UINT, WPARAM, LPARAM position, BOOL&) {
 BOOL CMainFrame::PreTranslateMessage(MSG* message) {
     if (m_memorySearchDialog && m_memorySearchDialog->IsWindow())
         return m_memorySearchDialog->ProcessMessage(message);
-    if (rxpce_config::dialog_open || m_preparing || m_stopping)
+    if (rxpce_config::dialog_open || m_memorySearchRequested || m_preparing || m_stopping)
         return FALSE;
     const auto result = m_videoShortcuts.process(message->message, message->wParam, message->lParam,
                                                  MachineCommands().ready(), bFullScreen.load());
@@ -886,7 +939,7 @@ BOOL CMainFrame::LoadProfile() {
     std::string error;
     if (!rxpce_config::load(m_configPath, m_config, error)) {
         m_configWritable = false;
-        MessageBox(
+        ShowMessage(
             (error + "\nUsing defaults. The file will be replaced only if you save Settings.")
                 .c_str(),
             "Cannot load rxpce.json", MB_OK | MB_ICONWARNING);
@@ -967,6 +1020,7 @@ void CMainFrame::UpdateAudioMenu() {
     }
 }
 LRESULT CMainFrame::OnAudioCommand(WORD,WORD id,HWND,BOOL&) {
+    if (m_memorySearchRequested) return 0;
     if (!m_profileLoaded || !m_configWritable || m_preparing || m_stopping || rxpce_config::dialog_open)
         return 0;
     try {
@@ -993,10 +1047,10 @@ void CMainFrame::SaveProfile() {
     CaptureRuntime();
     std::string error;
     if (!rxpce_config::save(m_configPath, m_config, error))
-        MessageBox(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
+        ShowMessage(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
 }
 bool CMainFrame::CanSelectInputProfile() const {
-    return m_profileLoaded && !m_thread && !m_preparing && !m_stopping &&
+    return m_profileLoaded && !m_thread && !m_preparing && !m_stopping && !m_memorySearchRequested &&
            !rxpce_config::dialog_open;
 }
 void CMainFrame::UpdateInputProfileLabels() {
@@ -1046,11 +1100,10 @@ LRESULT CMainFrame::OnInputProfile(WORD, WORD id, HWND, BOOL&) {
             UpdateInputProfileLabels();
             return 0;
         }
-        rxpce_config::DialogInputScope input;
-        MessageBox(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
+        ShowMessage(error.c_str(), "Cannot save rxpce.json", MB_OK | MB_ICONERROR);
     } catch (const std::exception& error) {
         rxpce_config::DialogInputScope input;
-        MessageBox(error.what(), "Cannot switch input profile", MB_OK | MB_ICONERROR);
+        ShowMessage(error.what(), "Cannot switch input profile", MB_OK | MB_ICONERROR);
     }
     return 0;
 }

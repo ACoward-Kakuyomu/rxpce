@@ -30,3 +30,4 @@ void ZoomWindow();
 void SetVideoZoom(int zoom);
 void SetVideoPresentation(rxpce_video::AspectMode mode, int zoom);
 void ResizeVideoWindow(int width, int height);
+void RestoreVideoWindowSize();

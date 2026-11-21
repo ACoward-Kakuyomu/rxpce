@@ -167,6 +167,8 @@ LocalMediaPath local_media_path(const std::wstring& absolute, const DosDeviceQue
         if (!starts(target, L"\\??\\"))
             blocked();
         path = dos_name(target);
+        if (path.empty())
+            blocked();
         for (const auto& part : p.parts) {
             if (path.back() != L'\\')
                 path += L'\\';

@@ -49,11 +49,15 @@ cmake --build build --config Release --target rxpce_cd_dump --parallel
 
 出力フォルダーは未作成、親フォルダーは既存である必要があります。空の既存フォルダーも拒否します。媒体に対する書き込みや自動イジェクトは行いません。利用可能なら取り出しを一時抑止し、終了時に解除を試みます。
 
+出力先の末尾に`\`・`/`を付けても、付けない場合と同じフォルダーとして扱います。重複する末尾区切りも取り除きます。ルートへの出力はできず、既存フォルダー・ファイルの上書きや親フォルダーの自動作成は行いません。
+
 INDEX 00/01の位置を確定した後、RAW2352バイトのトラック別BINへ読み取り、もう一度ドライブから全範囲を取得して比較します。初回は最大16セクター、照合時は最大15セクターで読み、要求境界を変えます。要求サイズが扱えない場合は小さく分割し、1セクターの失敗や不一致は追加3回まで再取得します。各パスの最初の音声と、データから音声へ切り替わる箇所では、別の既知の音声位置を1セクター事前取得してから対象位置へ戻します。事前取得したバイトは捨て、回数を `audio_prime_reads` に記録します。音声の開始位相を整えるための機器操作で、PCMの加工やオフセット校正は行いません。音声があるにもかかわらず別の音声位置がない構成は拒否します。再読込が保存済みの内容と一致しなければ完成品にしません。無音・ゼロの補完、多数決、原データの修復はしません。
 
 作業中は出力先の親に `.rxpce-cd-partial-*` を作り、検証とフラッシュがすべて成功した後に正式なフォルダー名へ変更します。通常の失敗・中断では自分で作った一時ファイルだけを削除します。強制終了や後始末の失敗で残った一時フォルダーは完成品ではありません。出力先と同じボリュームに、約2352バイト×取り込みセクター数の空き容量が必要です。
 
 完成出力は `disc.cue`、`track01.bin` 等、`capture.json` です。CUEとBINはフォルダー単位で扱ってください。JSONには位置取得の根拠、各BINのサイズ・SHA-256、再取得回数、照合状態、未対応範囲を記録します。基準媒体では全BINのサイズ・SHA-256を独立確認し、既存イメージとの共通本体、生成CUEでの起動・音声・ステート保存復帰と再起動後の復帰を確認しました。
+
+`probe`と`capture.json`の`device`に使うINQUIRY識別欄は、印字可能ASCIIと固定欄の空白を保持します。制御文字・DEL・非ASCIIの生byteは`\xHH`（大文字16進）、元のバックスラッシュは`\\`で表し、文字コードは推測しません。JSON上ではこれらのバックスラッシュがさらにJSONの規則でエスケープされます。Windowsのデバイスパス等の正規UTF-8表記は維持します。
 
 ### 範囲と制限
 
@@ -112,11 +116,15 @@ cmake --build build --config Release --target rxpce_cd_dump --parallel
 
 The destination folder must not exist, even if empty; its parent must exist. The tool does not write to or automatically eject media. It attempts to prevent removal while working, if supported, and releases the lock on exit.
 
+A destination with trailing `\` or `/`, including repeated trailing separators, refers to the same folder as the spelling without them. Roots are rejected. Existing folders/files are never overwritten, and missing parent folders are not created automatically.
+
 After establishing the layout, it captures 2352-byte RAW sectors into per-track BIN files, then reads the complete range again from the drive and compares it with the captured bytes. The capture uses batches of up to 16 sectors; verification uses up to 15 to change request boundaries. Failed batches are split; single-sector failures and mismatches allow three additional attempts. At the first audio range of each pass and after a data-to-audio transition, it reads one sector at a different known audio address, discards those bytes, then returns to the capture address. The report counts these reads as `audio_prime_reads`. This establishes audio decoding without editing PCM or calibrating drive offsets. If audio is present but no distinct audio address exists, the layout is rejected. It never substitutes silence, zero-fills errors, uses majority voting, or repairs original bytes.
 
 Work is staged in a `.rxpce-cd-partial-*` folder beside the destination. Only a flushed and verified result is renamed to the final folder. Normal failures/cancellation clean up owned temporary files. A leftover stage after forced termination or cleanup failure is not a completed capture. Allow approximately 2352 bytes per captured sector on the output volume.
 
 Output consists of `disc.cue`, per-track files such as `track01.bin`, and `capture.json`. Keep the folder together. The report includes boundary evidence, BIN sizes and SHA-256 hashes, retries, verification status and excluded scope. For the reference disc, BIN sizes and SHA-256 hashes were checked independently, all common track bodies matched the existing image, and the generated CUE passed boot, audio, state save/load and restoration after restarting the application.
+
+The INQUIRY identification fields used in `probe` and the `device` entry in `capture.json` preserve printable ASCII and fixed-field spaces. Control bytes, DEL and non-ASCII bytes appear as `\xHH` with uppercase hex; a literal backslash appears as `\\`. The tool does not guess a character encoding. JSON additionally escapes these backslashes according to its own rules. Normal UTF-8 text such as Windows device paths is preserved.
 
 ### Scope and status
 

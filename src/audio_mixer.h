@@ -14,6 +14,7 @@
 #include <vector>
 #include <functional>
 #include <utility>
+#include <limits>
 
 namespace rxpce_audio {
 
@@ -197,13 +198,20 @@ class Mixer {
         seed_render();
     }
     void configure(unsigned rate, unsigned channels, unsigned base_clock, const PsgState& state) {
-        if (!rate || !base_clock || (channels != 1 && channels != 2))
+        if (rate < 1000 || rate > 192000 || !base_clock || (channels != 1 && channels != 2) ||
+            base_clock > (std::numeric_limits<unsigned>::max)() - (rate - 1))
             throw std::invalid_argument("Invalid audio format");
+        BandlimitedBuffer next_render;
+        next_render.configure(rate);
+        // A tick may cross several sample boundaries. Every resulting event must fit
+        // before the tail wraps; use 64-bit arithmetic before committing the format.
+        if ((std::uint64_t(rate) + base_clock - 1) / base_clock > next_render.event_offset_limit())
+            throw std::invalid_argument("Unsupported audio clock ratio");
         rate_ = rate;
         channels_ = channels;
         base_clock_ = base_clock;
         clock_discontinuities_ = 0;
-        render_.configure(rate);
+        render_ = std::move(next_render);
         capacity_frames_ = (rate * 200u + 999) / 1000;
         ready_.reset(capacity_frames_ * channels);
         samples_.resize(capacity_frames_ * channels);

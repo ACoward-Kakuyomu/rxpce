@@ -21,7 +21,8 @@ struct State {
     std::array<std::uint8_t, 8> mpr{};
     std::uint8_t mpr_latch = 0, irq_lines = 0, irq_mask = 0, irq_delay = 0;
     std::uint8_t irq_read_sample = 0; // Accepted requests cleared by a terminal data read.
-    bool irq_sampled_before_sei = false;
+    // Eligible pre-SEI levels; late sources cannot borrow this gate.
+    std::uint8_t irq_sei_sample = 0;
     bool nmi_line = false, nmi_pending = false, low_speed = true;
     std::uint64_t elapsed = 0;
     TransferState transfer;
@@ -80,6 +81,7 @@ class HuC6280 {
     std::uint64_t instruction_time_ = 0;
     unsigned instruction_divisor_ = 1;
     bool in_step_ = false;
+    std::uint8_t instruction_irq_candidates_ = 0;
     void bus_wait(std::uint32_t, bool, unsigned base_cycle = 0);
     static std::uint8_t read_base(std::uint16_t, void*);
     static void write_base(std::uint16_t, std::uint8_t, void*);

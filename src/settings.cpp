@@ -13,11 +13,16 @@
 namespace rxpce_config {
 std::atomic_bool dialog_open{false};
 static std::atomic_bool input_release_pending{false};
+static std::size_t dialog_depth = 0; // UI thread only; dialog_open is read by the worker.
 void begin_dialog_input() {
+    if (dialog_depth++ != 0)
+        return;
     dialog_open = true;
     rxpce_input::keyboard_state().reset();
 }
 void end_dialog_input() {
+    if (!dialog_depth || --dialog_depth != 0)
+        return;
     rxpce_input::keyboard_state().reset();
     input_release_pending = true;
     dialog_open = false;

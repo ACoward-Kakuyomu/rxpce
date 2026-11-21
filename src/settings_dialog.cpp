@@ -10,6 +10,9 @@
 #include <cwchar>
 #include <shobjidl.h>
 #include "cd_session.h"
+#ifdef RXPCE_REVIEW_V160_TEST
+#include "review_v160_hooks.h"
+#endif
 
 using namespace rxpce_config;
 namespace {
@@ -535,9 +538,7 @@ void SettingsDialog::browse(int target, bool folder) {
             PWSTR path = nullptr;
             if (SUCCEEDED(dialog->GetResult(&item)) &&
                 SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
-                const auto selected = to_utf8(path);
-                CoTaskMemFree(path);
-                set_text(target, selected);
+                set_folder_path(target, path);
             }
         }
     } else {
@@ -553,6 +554,15 @@ void SettingsDialog::browse(int target, bool folder) {
         if (GetOpenFileNameW(&dialog))
             set_text(target, to_utf8(path.data()));
     }
+}
+void SettingsDialog::set_folder_path(int target, PWSTR path) {
+    ATL::CComHeapPtr<wchar_t> owned;
+    owned.Attach(path); // CoTaskMemFree also runs if conversion or UI text allocation throws.
+#ifdef RXPCE_REVIEW_V160_TEST
+    if (rxpce_review_v160::before_folder_convert) rxpce_review_v160::before_folder_convert();
+#endif
+    const auto selected = to_utf8(path);
+    set_text(target, selected);
 }
 LRESULT SettingsDialog::OnNotify(UINT, WPARAM, LPARAM notification, BOOL& handled) {
     const auto& header = *reinterpret_cast<NMHDR*>(notification);

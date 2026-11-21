@@ -7,6 +7,9 @@
 #include "replay_session.h"
 #include "cheats_session.h"
 #include "memory_search_dialog.h"
+#ifdef RXPCE_REVIEW_V160_TEST
+namespace rxpce_review_v160 { struct UiAccess; }
+#endif
 class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
                    public WTL::CMessageFilter,
                    public WTL::CIdleHandler {
@@ -25,6 +28,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     MESSAGE_HANDLER(WM_INITMENU, OnInitMenu)
     MESSAGE_HANDLER(WM_VIDEO_INITIALIZE, OnVideoInitialize)
     MESSAGE_HANDLER(WM_VIDEO_SIZE, OnVideoSize)
+    MESSAGE_HANDLER(WM_SIZE, OnWindowSize)
     MESSAGE_HANDLER(WM_DPICHANGED, OnVideoDpiChanged)
     MESSAGE_HANDLER(WM_APP + 8, OnMainLoopExited)
     MESSAGE_HANDLER(WM_APP + 9, OnReplayFinished)
@@ -43,6 +47,9 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     CHAIN_MSG_MAP(WTL::CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
   private:
+#ifdef RXPCE_REVIEW_V160_TEST
+    friend struct rxpce_review_v160::UiAccess;
+#endif
     std::wstring m_commandPath;
     std::filesystem::path m_configPath;
     rxpce_config::Settings m_config;
@@ -59,6 +66,8 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     std::unique_ptr<MemorySearchDialog> m_memorySearchDialog;
     std::unique_ptr<rxpce_config::DialogInputScope> m_memorySearchInput;
     bool m_memorySearchRequested = false;
+    bool m_memorySearchReadyPending = false;
+    bool m_memorySearchDisabledOwner = false, m_memorySearchEnablePending = false;
     unsigned m_generation = 0;
     unsigned m_audioWarningGeneration = 0;
     bool m_stopping = false;
@@ -79,6 +88,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     void StopEmulation(bool offer_save = true);
     void RefreshCursor();
     void ShowFailure(const char* detail, const char* title);
+    int ShowMessage(const char* detail, const char* title, UINT flags);
     void ApplySettings(const std::filesystem::path& game = {});
     BOOL LoadPceFile(const std::filesystem::path&,
                      std::shared_ptr<const rxpce_replay::Recording> playback = {});
@@ -127,6 +137,7 @@ class CMainFrame : public WTL::CFrameWindowImpl<CMainFrame>,
     LRESULT OnInitMenu(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnVideoInitialize(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnVideoSize(UINT, WPARAM, LPARAM, BOOL&);
+    LRESULT OnWindowSize(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnVideoDpiChanged(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnMainLoopExited(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnAudioUnavailable(UINT, WPARAM, LPARAM, BOOL&);

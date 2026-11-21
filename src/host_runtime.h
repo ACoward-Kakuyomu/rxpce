@@ -13,11 +13,12 @@ int RunEmulation(const std::filesystem::path& backup_file, rxpce_replay::Session
                  rxpce_cheats::Session* cheats = nullptr,
                  const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable = {},
                  const std::function<void()>& ready = {});
-// Called once on the emulation worker if enabled audio cannot initialize.
+// Notices run on the emulation worker if enabled output cannot initialize or stops.
 // The UI recipient must post a generation-tagged notification, never show a dialog here.
 bool InitializeHost(rxpce_machine::Machine& machine,
                     const std::function<void(rxpce_audio::OutputBackend)>& audio_unavailable = {});
 void ShutdownHost();
+void CheckAudioOutput();
 rxpce_machine::FrameSurface HostFrame();
 void PresentFrame(rxpce_machine::FrameSurface frame, rxpce_machine::DisplayRectangle area);
 bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& replay,

@@ -29,6 +29,7 @@ class WindowsDrive final : public Transport {
     std::optional<std::uint32_t> media_generation() override;
 };
 Toc read_toc(Transport& drive);
+std::string read_inquiry(Transport& drive);
 void read_session(Transport& drive);
 unsigned read_profile(Transport& drive);
 Bytes read_cd(Transport& drive, std::int32_t lba, unsigned count, unsigned subchannel,

@@ -87,20 +87,12 @@ void begin_dialog_input();
 void end_dialog_input();
 class DialogInputScope {
   public:
-    // UI thread only; nested native modal loops inherit the outer suppression.
-    DialogInputScope() : owns_suppression_(!dialog_open.load()) {
-        if (owns_suppression_)
-            begin_dialog_input();
-    }
-    ~DialogInputScope() {
-        if (owns_suppression_)
-            end_dialog_input();
-    }
+    // UI thread only; scopes may outlive the scope that opened them.
+    DialogInputScope() { begin_dialog_input(); }
+    ~DialogInputScope() { end_dialog_input(); }
     DialogInputScope(const DialogInputScope&) = delete;
     DialogInputScope& operator=(const DialogInputScope&) = delete;
 
-  private:
-    bool owns_suppression_;
 };
 bool block_game_input(const unsigned char* keys, bool pad_button_down = false);
 extern Settings::Input active_input;

@@ -6,6 +6,9 @@
 #include <dinput.h>
 #include <vector>
 #include <wrl/client.h>
+#ifdef RXPCE_REVIEW_V160_TEST
+namespace rxpce_review_v160 { struct UiAccess; }
+#endif
 
 class MappingCombo : public ATL::CWindowImpl<MappingCombo, WTL::CComboBox> {
   public:
@@ -41,6 +44,9 @@ class MappingCombo : public ATL::CWindowImpl<MappingCombo, WTL::CComboBox> {
     }
 };
 class SettingsDialog : public ATL::CDialogImpl<SettingsDialog> {
+#ifdef RXPCE_REVIEW_V160_TEST
+    friend struct rxpce_review_v160::UiAccess;
+#endif
   public:
     enum { IDD = IDD_SETTINGS };
     rxpce_config::Settings value;
@@ -96,6 +102,7 @@ class SettingsDialog : public ATL::CDialogImpl<SettingsDialog> {
     void list_players();
     void close_preview();
     void browse(int target, bool folder);
+    void set_folder_path(int target, PWSTR path);
     static BOOL CALLBACK enum_pad(const DIDEVICEINSTANCEA*, void*);
     LRESULT OnInit(UINT, WPARAM, LPARAM, BOOL&);
     LRESULT OnNotify(UINT, WPARAM, LPARAM, BOOL&);

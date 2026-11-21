@@ -15,7 +15,8 @@ bool valid_io(const rxpce_machine::IoState& io, std::string& error) {
         return reject("invalid controller bus");
     if (io.vdc_reg >= 32 || io.vce_reg.value >= 512)
         return reject("invalid video register index");
-    if (io.vdc_inc != 1 && io.vdc_inc != 32 && io.vdc_inc != 64 && io.vdc_inc != 128)
+    constexpr int increments[] = {1, 32, 64, 128};
+    if (io.vdc_inc != increments[(io.vdc[5].value >> 11) & 3])
         return reject("invalid VRAM increment");
     if (io.screen_w < 8 || io.screen_w > 512 || io.screen_w % 8 || io.screen_h < 1 ||
         io.screen_h > 512 || io.minline < 0 || io.maxline >= 512 || io.maxline < io.minline)

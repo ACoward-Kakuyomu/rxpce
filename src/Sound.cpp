@@ -18,6 +18,7 @@ HWND output_window = nullptr;
 unsigned output_channels = 2;
 std::uint64_t requested_frames = 0, missing_frames = 0, missing_events = 0;
 std::atomic<std::uint64_t> output_empty{0}, output_deferred{0};
+std::atomic<int> output_failure{-1};
 using WallClock = std::chrono::steady_clock;
 WallClock::time_point last_sync_end;
 SoundQueueStatistics timing;
@@ -102,6 +103,7 @@ void TrashSound() {
     // Never join the playback thread while holding its audio lock.
     ReleaseDSound();
     ReleaseWasapi();
+    output_failure = -1; // Both playback threads have joined; no old publisher remains.
     std::lock_guard<std::mutex> lock(sound_mutex);
     mixer.set_extra_source({});
     mixer.reset(0, rxpce_audio::PsgState{});
@@ -142,6 +144,8 @@ rxpce_audio::PsgPhaseState CaptureSoundPhase(std::uint32_t cycles) {
 
 bool RestoreSoundPhase(const rxpce_audio::PsgPhaseState& phase, std::uint32_t cycles,
                        const rxpce_audio::PsgState& state) {
+    if (!rxpce_audio::valid_phase(phase))
+        return false;
     std::function<void(float*, std::size_t, unsigned)> source;
     rxpce_audio::ComponentSource components;
     rxpce_audio::OutputSettings settings;
@@ -212,6 +216,25 @@ void ReportAudioOutput(bool empty, bool deferred) noexcept {
         output_empty.fetch_add(1, std::memory_order_relaxed);
     if (deferred)
         output_deferred.fetch_add(1, std::memory_order_relaxed);
+}
+void ReportSoundOutputFailure(rxpce_audio::OutputBackend backend) noexcept {
+    if (backend == rxpce_audio::OutputBackend::directsound ||
+        backend == rxpce_audio::OutputBackend::wasapi)
+        output_failure.store(static_cast<int>(backend), std::memory_order_release);
+}
+std::optional<rxpce_audio::OutputBackend> TakeSoundOutputFailure() {
+    if (output_failure.load(std::memory_order_acquire) < 0)
+        return {};
+    const auto value = output_failure.exchange(-1, std::memory_order_acq_rel);
+    if (value < 0)
+        return {};
+    const auto backend = static_cast<rxpce_audio::OutputBackend>(value);
+    std::lock_guard<std::mutex> lock(sound_mutex);
+    if (!initialized || !emulating || !active_settings.enabled ||
+        active_settings.backend != backend)
+        return {};
+    initialized = false; // Logical synthesis continues; only the dead host consumer is disabled.
+    return backend;
 }
 void SetSoundPaused(bool paused, std::uint32_t cycles) {
     std::lock_guard<std::mutex> lock(sound_mutex);

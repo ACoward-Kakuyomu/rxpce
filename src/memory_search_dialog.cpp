@@ -91,6 +91,8 @@ LRESULT MemorySearchDialog::OnCommand(UINT, WPARAM wparam, LPARAM, BOOL&) {
         } else if (id == IDC_SEARCH_NEW ||
                    (id == IDC_SEARCH_SIZE && HIWORD(wparam) == CBN_SELCHANGE)) {
             const auto size = ::SendDlgItemMessage(m_hWnd, IDC_SEARCH_SIZE, CB_GETCURSEL, 0, 0);
+            if (size < 0 || size > 2)
+                return 0;
             search_.reset(1u << static_cast<unsigned>(size));
             RefreshResults();
         } else if (id == IDC_SEARCH_FILTER) {

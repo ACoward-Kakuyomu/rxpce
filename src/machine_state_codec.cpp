@@ -100,10 +100,14 @@ bool valid_machine(const MachineSnapshot& value, const SnapshotRequirements& req
         return false;
     }
     if (requirements.vdc_mode == rxpce_video::VdcMode::fast &&
-        (value.vdc.dma.phase != rxpce_video::DmaPhase::idle ||
+        (value.vdc.dma.phase != rxpce_video::DmaPhase::idle || value.vdc.dma.satb_running ||
          value.vdc.cpu.kind != rxpce_video::CpuVramKind::none || value.vdc.sprite_fetch_cells ||
          value.vdc.sprite_fetch_remaining)) {
         error = "invalid Fast VDC transfer";
+        return false;
+    }
+    if (requirements.vdc_mode == rxpce_video::VdcMode::accurate && value.vdc.fast_satb_lines) {
+        error = "invalid Accurate VDC transfer";
         return false;
     }
     if (value.io.controllers.count != requirements.controllers ||

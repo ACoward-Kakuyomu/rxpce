@@ -28,6 +28,7 @@ class Renderer {
     RenderAttempt present_frame(const PresentationFrame& frame);
     // Read the last drawn target before Present (used by the WARP regression test).
     HRESULT readback(std::vector<std::uint32_t>& rgba);
+    HRESULT removal_reason() const;
 
   private:
     RenderAttempt render_image(const std::uint32_t* rgba, int width, int height, int scale,

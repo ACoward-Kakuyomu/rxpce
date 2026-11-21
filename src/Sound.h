@@ -28,6 +28,9 @@ void ResetSound(std::uint32_t cycles, const rxpce_audio::PsgState& state);
 void ReadMixedAudio(float* output, std::size_t frames);
 std::size_t AvailableMixedAudioFrames();
 void ReportAudioOutput(bool empty, bool deferred) noexcept;
+// Playback thread publishes; the emulation worker consumes once per session.
+void ReportSoundOutputFailure(rxpce_audio::OutputBackend backend) noexcept;
+std::optional<rxpce_audio::OutputBackend> TakeSoundOutputFailure();
 void DiscardSoundOutput(std::uint32_t cycles);
 void SetSoundPaused(bool paused, std::uint32_t cycles);
 // Producer-thread callback; the playback thread only consumes the finished mix.

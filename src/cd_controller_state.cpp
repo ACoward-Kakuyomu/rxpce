@@ -216,6 +216,8 @@ bool Controller::load_state(const char* data, std::size_t size, std::uint64_t cp
         require(s.command_size_ <= s.command_length_ ||
                     (s.command_length_ == 0 && s.command_size_ <= 1),
                 "Invalid CD command position");
+        require(s.phase_ != Phase::command || !s.ack_pending_ || s.command_size_ != 0,
+                "Invalid acknowledged CD command position");
         require(s.size_ <= 2048 && s.position_ <= s.size_ && s.remaining_ <= 256,
                 "Invalid CD transfer state");
         require(!(s.irqs_ & ~0x6c) && s.sense_ <= 15 && (s.speaker_ == 0 || s.speaker_ == 2) &&

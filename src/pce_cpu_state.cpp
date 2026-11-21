@@ -18,9 +18,10 @@ std::vector<char> encode_cpu(const PceCpu& value) {
     put(s.mpr_latch, 1);
     put(s.irq_lines, 1);
     put(s.irq_mask, 1);
-    put(s.irq_delay, 1);
-    put((s.irq_sampled_before_sei ? 1 : 0) | (s.nmi_line ? 2 : 0) | (s.nmi_pending ? 4 : 0) |
-            (s.low_speed ? 8 : 0) | (s.irq_read_sample <= 7 ? s.irq_read_sample << 4 : 128),
+    // Gate byte: bit0 delay, bits1-3 pre-SEI levels, upper bits reserved.
+    put(s.irq_delay <= 1 && s.irq_sei_sample <= 7 ? s.irq_delay | (s.irq_sei_sample << 1) : 128, 1);
+    put((s.nmi_line ? 2 : 0) | (s.nmi_pending ? 4 : 0) | (s.low_speed ? 8 : 0) |
+            (s.irq_read_sample <= 7 ? s.irq_read_sample << 4 : 128),
         1);
     put(s.elapsed, 8);
     put(std::uint32_t(value.line_period), 4);
@@ -59,11 +60,12 @@ bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu&
     s.mpr_latch = byte(get(1));
     s.irq_lines = byte(get(1));
     s.irq_mask = byte(get(1));
-    s.irq_delay = byte(get(1));
+    const auto gates = get(1);
+    s.irq_delay = byte(gates & 1);
+    s.irq_sei_sample = byte(gates >> 1);
     const auto flags = get(1);
-    if (flags > 127 || s.irq_lines > 7 || s.irq_mask > 7 || s.irq_delay > 1)
+    if (flags > 127 || (flags & 1) || gates > 15 || s.irq_lines > 7 || s.irq_mask > 7)
         return false;
-    s.irq_sampled_before_sei = (flags & 1) != 0;
     s.nmi_line = (flags & 2) != 0;
     s.nmi_pending = (flags & 4) != 0;
     s.low_speed = (flags & 8) != 0;
@@ -89,8 +91,11 @@ bool decode_cpu(const char* data, std::size_t size, int line, int timer, PceCpu&
     const auto alternate = get(1);
     t.alternate = alternate != 0;
     const bool alternating = t.opcode == 0xe3 || t.opcode == 0xf3;
-    if ((t.opcode && s.irq_read_sample) || alternate > 1 || t.remaining > 65536 ||
-        (!alternating && t.alternate))
+    if (((s.p & rxpce_cpu::I) && s.irq_read_sample) ||
+        (s.irq_sei_sample && (!(s.p & rxpce_cpu::I) || s.irq_read_sample ||
+                              (s.irq_sei_sample & ~(s.irq_lines & ~s.irq_mask)))) ||
+        (t.opcode && (s.irq_read_sample || s.irq_sei_sample)) || alternate > 1 ||
+        t.remaining > 65536 || (!alternating && t.alternate))
         return false;
     switch (t.opcode) {
     case 0:

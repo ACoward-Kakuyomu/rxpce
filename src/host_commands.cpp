@@ -41,6 +41,7 @@ rxpce_host::CommandChannel& MachineCommands() {
 namespace rxpce_host {
 bool PollHostCommands(rxpce_machine::Machine& machine, rxpce_replay::Session& replay,
                       rxpce_cheats::Session& cheats) {
+    CheckAudioOutput();
     auto commands = MachineCommands().take();
     const bool record_request_seen=(commands & EV_REPLAY_RECORD)!=0;
     if ((commands & EV_REPLAY_RECORD) && cheats.freezes()) {

@@ -5,11 +5,15 @@
 #include "log.h"
 #include "audio_mixer.h"
 #include "audio_stream.h"
+#include "audio_error_log.h"
 #include "unique_handle.h"
 #include "multimedia_task.h"
 #include <process.h>
 #include <vector>
 #include <utility>
+#ifdef RXPCE_REVIEW_V160_TEST
+#include "review_v160_hooks.h"
+#endif
 
 using Microsoft::WRL::ComPtr;
 ComPtr<IDirectSound> lpDSound;
@@ -45,7 +49,9 @@ class TimerResolution {
     bool active_ = false;
 };
 TimerResolution timer_resolution;
-bool buffer_restored = false;
+struct Recovery {
+    bool pending = false, primary = false, output = false, clear = false;
+} recovery;
 DWORD next_write = 0;
 std::vector<float> mixed;
 rxpce_audio::PlaybackCursor stream_cursor;
@@ -76,17 +82,50 @@ class BufferLock {
     }
 };
 
-BOOL clear_buffer() {
+HRESULT clear_buffer() {
     BufferLock region(lpSoundBuffer.Get());
     const auto result = region.lock(0, 0, DSBLOCK_ENTIREBUFFER);
     if (FAILED(result))
-        return FALSE;
+        return result;
+    if (!region.first || region.first_bytes > ds_dwBufferSize ||
+        region.second_bytes != ds_dwBufferSize - region.first_bytes ||
+        (region.second_bytes && !region.second))
+        return E_INVALIDARG;
     if (region.first)
         std::memset(region.first, 0, region.first_bytes);
     if (region.second)
         std::memset(region.second, 0, region.second_bytes);
-    return SUCCEEDED(region.unlock());
+    return region.unlock();
 }
+
+bool retryable(HRESULT status) {
+    return status == DSERR_BUFFERLOST || status == DSERR_PRIOLEVELNEEDED;
+}
+void mark_lost(bool primary) {
+    if (!recovery.pending) {
+        lpSoundBuffer->Stop();
+        if (primary_buffer)
+            primary_buffer->Stop();
+    }
+    recovery.pending = recovery.clear = true;
+    (primary ? recovery.primary : recovery.output) = true;
+    stream_cursor.reset(0);
+    reported_lead = 0;
+}
+void report_error(rxpce_audio::ErrorLog::Event event) noexcept {
+    using Kind = rxpce_audio::ErrorLog::Kind;
+    if (event.kind == Kind::failure)
+        LogDump("DirectSound error: %08lx\n", static_cast<unsigned long>(event.code));
+    else if (event.kind == Kind::repeated)
+        LogDump("DirectSound repeated error: %08lx count=%llu\n",
+                static_cast<unsigned long>(event.code),
+                static_cast<unsigned long long>(event.count));
+    else
+        LogDump("DirectSound recovered after error: %08lx\n",
+                static_cast<unsigned long>(event.code));
+}
+HRESULT service_buffer();
+HRESULT write_buffer(DWORD bytes);
 
 unsigned __stdcall play_proc(void*) {
     rxpce_host::MultimediaTask task(L"Audio");
@@ -103,40 +142,96 @@ unsigned __stdcall play_proc(void*) {
         }
     } stop_playback;
     const HANDLE events[] = {stop_event.get(), poll_timer.get()};
-    for (;;) {
-        const DWORD result = WaitForMultipleObjects(2, events, FALSE, INFINITE);
-        if (result == WAIT_OBJECT_0)
-            return 0;
-        if (result != WAIT_OBJECT_0 + 1)
-            return 1;
-        if (!ServiceDSoundBuffer()) {
-            LogDump("Audio buffer service failed\n");
-            return 1;
+    rxpce_audio::ErrorLog errors;
+    HRESULT terminal = S_OK;
+    try {
+        for (;;) {
+            const DWORD result = WaitForMultipleObjects(2, events, FALSE, INFINITE);
+            if (result == WAIT_OBJECT_0)
+                break;
+            if (result != WAIT_OBJECT_0 + 1) {
+                terminal = E_FAIL;
+                break;
+            }
+            const auto status = service_buffer();
+            if (SUCCEEDED(status)) {
+                errors.success(GetTickCount64(), report_error);
+                continue;
+            }
+            if (!retryable(status)) {
+                terminal = status;
+                break;
+            }
+            errors.error(static_cast<std::uint32_t>(status), GetTickCount64(), report_error);
+            const auto stopped = WaitForSingleObject(stop_event.get(), 100);
+            if (stopped == WAIT_OBJECT_0)
+                break;
+            if (stopped != WAIT_TIMEOUT) {
+                terminal = E_FAIL;
+                break;
+            }
         }
+    } catch (...) {
+        terminal = E_FAIL;
     }
-    return 0;
+    if (FAILED(terminal)) {
+        errors.error(static_cast<std::uint32_t>(terminal), GetTickCount64(), report_error);
+        ReportSoundOutputFailure(rxpce_audio::OutputBackend::directsound);
+    }
+    errors.finish(report_error);
+    return FAILED(terminal) ? 1 : 0;
 }
 } // namespace
 
-BOOL ServiceDSoundBuffer() {
+namespace {
+HRESULT service_buffer() {
     if (!lpSoundBuffer || (ds_nChannels != 1 && ds_nChannels != 2))
-        return FALSE;
+        return E_INVALIDARG;
     const DWORD frame_bytes = ds_nChannels * sizeof(std::int16_t);
     if (ds_dwBufferSize < frame_bytes * 2 || ds_dwBufferSize % frame_bytes || !ds_dwLockSize ||
         ds_dwLockSize % frame_bytes)
-        return FALSE;
+        return E_INVALIDARG;
+    for (const auto primary : {true, false}) {
+        auto* buffer = primary ? primary_buffer.Get() : lpSoundBuffer.Get();
+        if (!buffer)
+            continue;
+        DWORD state = 0;
+        const auto status = buffer->GetStatus(&state);
+        if (status == DSERR_BUFFERLOST || (SUCCEEDED(status) && (state & DSBSTATUS_BUFFERLOST)))
+            mark_lost(primary);
+        else if (FAILED(status))
+            return status;
+    }
+    if (recovery.primary) {
+        const auto status = primary_buffer->Restore();
+        if (FAILED(status))
+            return status;
+        recovery.primary = false;
+    }
+    if (recovery.output) {
+        const auto status = lpSoundBuffer->Restore();
+        if (FAILED(status))
+            return status;
+        recovery.output = false;
+    }
+    if (recovery.clear) {
+        const auto status = clear_buffer();
+        if (status == DSERR_BUFFERLOST)
+            mark_lost(false);
+        if (FAILED(status))
+            return status;
+        recovery.clear = false;
+    }
     DWORD play, safe_write;
     auto result = lpSoundBuffer->GetCurrentPosition(&play, &safe_write);
-    bool restored = false;
     if (result == DSERR_BUFFERLOST) {
-        if (FAILED(lpSoundBuffer->Restore()) || !clear_buffer())
-            return FALSE;
-        result = lpSoundBuffer->GetCurrentPosition(&play, &safe_write);
-        stream_cursor.reset(0);
-        restored = true;
+        mark_lost(false);
+        return result;
     }
-    if (FAILED(result) || play >= ds_dwBufferSize || safe_write >= ds_dwBufferSize)
-        return FALSE;
+    if (FAILED(result))
+        return result;
+    if (play >= ds_dwBufferSize || safe_write >= ds_dwBufferSize)
+        return E_INVALIDARG;
     const DWORD capacity = ds_dwBufferSize / frame_bytes;
     if (stream_cursor.capacity() != capacity) {
         const DWORD target =
@@ -164,19 +259,29 @@ BOOL ServiceDSoundBuffer() {
         if (!frames)
             break;
         next_write = stream_cursor.offset() * frame_bytes;
-        if (!WriteDSoundBuffer(frames * frame_bytes))
-            return FALSE;
+        result = write_buffer(frames * frame_bytes);
+        if (FAILED(result))
+            return result;
         stream_cursor.commit(frames);
-        if (buffer_restored) {
-            // The lock path had to clear the entire device buffer. Its former
-            // write horizon no longer contains valid audio; prime it next poll.
-            stream_cursor.reset(0);
-            break;
-        }
     }
-    if (restored && FAILED(lpSoundBuffer->Play(0, 0, DSBPLAY_LOOPING)))
-        return FALSE;
-    return TRUE;
+    if (recovery.pending) {
+        for (const auto primary : {true, false}) {
+            auto* buffer = primary ? primary_buffer.Get() : lpSoundBuffer.Get();
+            if (!buffer)
+                continue;
+            result = buffer->Play(0, 0, DSBPLAY_LOOPING);
+            if (result == DSERR_BUFFERLOST)
+                mark_lost(primary);
+            if (FAILED(result))
+                return result;
+        }
+        recovery = {};
+    }
+    return S_OK;
+}
+} // namespace
+BOOL ServiceDSoundBuffer() {
+    return SUCCEEDED(service_buffer());
 }
 
 BOOL InitDSound(HWND hwnd, const rxpce_audio::OutputSettings& settings) {
@@ -196,7 +301,13 @@ BOOL InitDSound(HWND hwnd, const rxpce_audio::OutputSettings& settings) {
     // Balance the audio timer resolution request during teardown.
     if (!timer_resolution.acquire())
         return FALSE;
-    HRESULT result = DirectSoundCreate(nullptr, lpDSound.ReleaseAndGetAddressOf(), nullptr);
+    HRESULT result;
+#ifdef RXPCE_REVIEW_V160_TEST
+    if (rxpce_review_v160::create_dsound)
+        result = rxpce_review_v160::create_dsound(lpDSound.ReleaseAndGetAddressOf());
+    else
+#endif
+        result = DirectSoundCreate(nullptr, lpDSound.ReleaseAndGetAddressOf(), nullptr);
     if (FAILED(result)) {
         ReleaseDSound();
         return FALSE;
@@ -304,50 +415,48 @@ BOOL InitDSound(HWND hwnd, const rxpce_audio::OutputSettings& settings) {
     return TRUE;
 }
 
-BOOL WriteDSoundBuffer(DWORD bytes) {
-    buffer_restored = false;
+namespace {
+HRESULT write_buffer(DWORD bytes) {
     if (ds_nChannels != 1 && ds_nChannels != 2)
-        return FALSE;
+        return E_INVALIDARG;
     if (!bytes)
         bytes = ds_dwLockSize;
     const DWORD frame_bytes = ds_nChannels * sizeof(std::int16_t);
     if (!lpSoundBuffer || !ds_dwBufferSize || !ds_dwLockSize || bytes > ds_dwLockSize ||
         bytes > ds_dwBufferSize || bytes % frame_bytes || ds_dwBufferSize % frame_bytes)
-        return FALSE;
+        return E_INVALIDARG;
     // Allocate before locking device memory; an allocation failure never leaves it locked.
     try {
         mixed.resize(bytes / sizeof(std::int16_t));
     } catch (const std::exception&) {
-        return FALSE;
+        return E_OUTOFMEMORY;
     }
     BufferLock region(lpSoundBuffer.Get());
     HRESULT result = region.lock(next_write, bytes);
-    bool restored = false;
     if (result == DSERR_BUFFERLOST) {
-        if (FAILED(lpSoundBuffer->Restore()) || !clear_buffer())
-            return FALSE;
-        buffer_restored = true;
-        restored = true;
-        result = region.lock(next_write, bytes);
+        mark_lost(false);
+        return result;
     }
     if (FAILED(result)) {
-        LogDump("Audio lock failed: %08X\n", result);
-        return FALSE;
+        return result;
     }
     if (!region.first || region.first_bytes % frame_bytes || region.second_bytes % frame_bytes ||
         region.first_bytes > bytes || region.second_bytes != bytes - region.first_bytes ||
         (region.second_bytes && !region.second))
-        return FALSE;
+        return E_INVALIDARG;
     ReadMixedAudio(mixed.data(), bytes / frame_bytes);
     rxpce_audio::write_pcm16(mixed.data(), static_cast<std::int16_t*>(region.first),
                              region.first_bytes / 2, static_cast<std::int16_t*>(region.second),
                              region.second_bytes / 2);
-    if (FAILED(region.unlock()))
-        return FALSE;
-    if (restored && FAILED(lpSoundBuffer->Play(0, 0, DSBPLAY_LOOPING)))
-        return FALSE;
+    result = region.unlock();
+    if (FAILED(result))
+        return result;
     next_write = (next_write + bytes) % ds_dwBufferSize;
-    return TRUE;
+    return S_OK;
+}
+} // namespace
+BOOL WriteDSoundBuffer(DWORD bytes) {
+    return SUCCEEDED(write_buffer(bytes));
 }
 
 BOOL StartSound() {
@@ -357,8 +466,8 @@ BOOL StartSound() {
     next_write = 0;
     stream_cursor.reset(0);
     reported_lead = 0;
-    buffer_restored = false;
-    if (!clear_buffer() || !ServiceDSoundBuffer())
+    recovery = {};
+    if (FAILED(clear_buffer()) || !ServiceDSoundBuffer())
         return FALSE;
     if (primary_buffer && FAILED(primary_buffer->Play(0, 0, DSBPLAY_LOOPING)))
         return FALSE;
@@ -404,6 +513,7 @@ BOOL ReleaseSoundBuffer() {
     mixed.clear();
     next_write = 0;
     stream_cursor.reset(0);
+    recovery = {};
     return ok;
 }
 

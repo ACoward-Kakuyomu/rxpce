@@ -126,6 +126,7 @@ bool HuC6280::delegate(std::uint8_t opcode, int operand, unsigned write_cycle,
 void HuC6280::reset(const std::array<std::uint8_t, 8>& mapping) {
     const auto initial_mapping = mapping; // The caller may pass state().mpr.
     state_ = State{};
+    instruction_irq_candidates_ = 0;
     state_.mpr = initial_mapping;
     waits_ = 0;
     state_.pc = word(0xfffe);
@@ -136,12 +137,18 @@ void HuC6280::set_irq_lines(std::uint8_t lines) {
     if (lines & ~state_.irq_lines & ~state_.irq_mask)
         state_.irq_delay = 1;
     state_.irq_lines = lines;
+    state_.irq_sei_sample &= lines;
+    if (in_step_)
+        instruction_irq_candidates_ &= lines;
 }
 void HuC6280::set_irq_mask(std::uint8_t mask) {
     mask &= 7;
     if (state_.irq_mask & ~mask)
         state_.irq_delay = 1;
     state_.irq_mask = mask;
+    state_.irq_sei_sample &= std::uint8_t(~mask);
+    if (in_step_)
+        instruction_irq_candidates_ &= std::uint8_t(~mask);
 }
 void HuC6280::set_nmi_line(bool asserted) {
     if (asserted && !state_.nmi_line)
@@ -159,6 +166,7 @@ unsigned HuC6280::enter_interrupt(std::uint16_t vector, bool software) {
 }
 StepResult HuC6280::step() {
     waits_ = 0;
+    instruction_irq_candidates_ = 0;
     const unsigned divisor = state_.low_speed ? 4 : 1;
     instruction_time_ = state_.elapsed;
     instruction_divisor_ = divisor;
@@ -173,14 +181,15 @@ StepResult HuC6280::step() {
     }
     unsigned cycles = 0;
     bool interrupt = false, valid = true;
-    const bool irq_enabled = !(state_.p & I) || state_.irq_sampled_before_sei;
-    state_.irq_sampled_before_sei = false;
+    const unsigned live = state_.irq_lines & ~state_.irq_mask & 7;
+    const unsigned sei_sample = std::exchange(state_.irq_sei_sample, 0) & live;
     const bool delayed = state_.irq_delay != 0;
     if (delayed)
         --state_.irq_delay;
     const unsigned sampled = std::exchange(state_.irq_read_sample, 0);
+    // Only the retained set bypasses delay/I; late levels retain their normal gate.
     const unsigned active =
-        sampled ? sampled : (!delayed && irq_enabled ? state_.irq_lines & ~state_.irq_mask & 7 : 0);
+        sampled ? sampled : sei_sample ? sei_sample : (!delayed && !(state_.p & I) ? live : 0);
     if (state_.nmi_pending) {
         state_.nmi_pending = false;
         cycles = enter_interrupt(0xfffc, false);
@@ -192,6 +201,7 @@ StepResult HuC6280::step() {
                                  false);
         interrupt = true;
     } else {
+        instruction_irq_candidates_ = std::uint8_t(live);
         const auto opcode = read(state_.pc);
         cycles = execute(opcode, valid);
     }
@@ -518,7 +528,7 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
         return 4;
     }
     case 0x08:
-        push(s.p);
+        push(std::uint8_t(s.p | B));
         ++s.pc;
         return 3;
     case 0x28:
@@ -650,8 +660,8 @@ unsigned HuC6280::execute(std::uint8_t op, bool& valid) {
     if (op == 0x58 && (old_p & I))
         s.irq_delay = 1;
     // SEI cannot revoke an IRQ sampled while the previous I flag was clear.
-    if (op == 0x78 && !(old_p & I) && (s.irq_lines & ~s.irq_mask & 7))
-        s.irq_sampled_before_sei = true;
+    if (op == 0x78 && !(old_p & I))
+        s.irq_sei_sample = instruction_irq_candidates_;
     if (op == 0x20 || op == 0x60)
         return 7;
     if (op == 0x4c)

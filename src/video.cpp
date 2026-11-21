@@ -21,6 +21,7 @@ struct PresentationOptions {
 };
 std::atomic<PresentationOptions> presentation{PresentationOptions{}};
 int source_width = 320, source_height = 240; // UI thread only.
+bool window_size_pending = false;          // UI thread only; deferred while iconic.
 RECT saved_window = {};
 LONG_PTR saved_style = 0;
 LONG_PTR saved_exstyle = 0;
@@ -72,8 +73,9 @@ BOOL InitializeVideo() {
                                   static_cast<unsigned long>(status));
                 last_error = status;
                 if (status == DXGI_ERROR_DEVICE_REMOVED || status == DXGI_ERROR_DEVICE_RESET) {
-                    LogDumpDetail("D3D11 device lost, retrying presentation: %08lX\n",
-                                  static_cast<unsigned long>(status));
+                    LogDumpDetail("D3D11 device lost, retrying presentation: status=%08lX reason=%08lX\n",
+                                  static_cast<unsigned long>(status),
+                                  static_cast<unsigned long>(renderer.removal_reason()));
                     device_lost = true;
                     next_device_attempt =
                         std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
@@ -157,6 +159,11 @@ void ResizeVideoWindow(int width, int height) {
         return;
     source_width = width;
     source_height = height;
+    if (IsIconic(hwnd)) {
+        window_size_pending = true;
+        return;
+    }
+    window_size_pending = false; // Clear before SetWindowPos can reenter WM_SIZE.
     if (bFullScreen) {
         MONITORINFO monitor = {sizeof(monitor)};
         if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor)) {
@@ -199,6 +206,11 @@ void ResizeVideoWindow(int width, int height) {
     }
 }
 
+void RestoreVideoWindowSize() {
+    if (window_size_pending && !IsIconic(hwnd))
+        ResizeVideoWindow(0, 0);
+}
+
 void ZoomWindow() {
     if (bFullScreen)
         return;
@@ -222,6 +234,8 @@ void SetVideoPresentation(rxpce_video::AspectMode mode, int scale) {
 
 void ChangeWindowMode() {
     if (!bFullScreen) {
+        if (IsIconic(hwnd))
+            return;
         GetWindowRect(hwnd, &saved_window);
         saved_style = GetWindowLongPtr(hwnd, GWL_STYLE);
         saved_exstyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);

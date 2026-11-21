@@ -59,6 +59,8 @@ Profile identify(const std::vector<unsigned char>& bytes) {
     return lookup({bytes.size(), sha256(bytes.data(), identity_prefix_bytes)});
 }
 void Mapper::configure(unsigned banks, std::uint32_t flags) {
+    if (banks > 1024)
+        throw std::invalid_argument("Unsupported ROM bank count");
     rom_banks_ = banks;
     flags_ = flags;
     reset();

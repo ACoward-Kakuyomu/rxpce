@@ -132,6 +132,8 @@ FileStore::FileStore(const Layout& layout,const std::wstring& destination,const 
             throw std::runtime_error("Invalid output track range");
     }
     s.layout=layout;s.device=device;s.target=fs::absolute(destination).lexically_normal();
+    while (s.target.filename().empty() && s.target != s.target.root_path())
+        s.target=s.target.parent_path();
     const auto parent=s.target.parent_path();
     if (s.target.filename().empty() || !fs::is_directory(parent) || fs::exists(s.target))
         throw std::runtime_error("Output folder must be new and its parent must exist");

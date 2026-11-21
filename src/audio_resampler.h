@@ -98,6 +98,9 @@ class BandlimitedBuffer {
         std::array<double, 2> integral{};
         std::vector<std::array<double, 2>> tail;
     };
+    std::size_t event_offset_limit() const {
+        return kernel_ ? state_.tail.size() - kernel_->taps : 0;
+    }
     void configure(unsigned rate, unsigned pcm_rate = 0) {
         auto next = kernel(rate, pcm_rate);
         State state;

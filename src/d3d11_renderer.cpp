@@ -11,6 +11,9 @@
 #include <dxgi1_3.h>
 #include <wrl/client.h>
 #include <cstring>
+#ifdef RXPCE_REVIEW_V160_TEST
+#include "review_v160_hooks.h"
+#endif
 
 namespace rxpce_video {
 using Microsoft::WRL::ComPtr;
@@ -73,6 +76,13 @@ Renderer::Renderer() = default;
 Renderer::~Renderer() = default;
 void Renderer::shutdown() {
     impl.reset();
+}
+HRESULT Renderer::removal_reason() const {
+#ifdef RXPCE_REVIEW_V160_TEST
+    if (rxpce_review_v160::removed_reason)
+        return rxpce_review_v160::removed_reason();
+#endif
+    return impl ? impl->device->GetDeviceRemovedReason() : S_OK;
 }
 
 HRESULT Renderer::initialize(HWND window, int adapter_index) {
@@ -220,11 +230,9 @@ RenderAttempt Renderer::render_image(const std::uint32_t* rgba, int width, int h
     if (FAILED(hr))
         return {hr, false};
     if (d.source_width != static_cast<unsigned>(width) ||
-        d.source_height != static_cast<unsigned>(height) || !d.texture) {
-        ID3D11ShaderResourceView* empty = nullptr;
-        d.context->PSSetShaderResources(0, 1, &empty);
-        d.view.Reset();
-        d.texture.Reset();
+        d.source_height != static_cast<unsigned>(height) || !d.texture || !d.view) {
+        ComPtr<ID3D11Texture2D> texture;
+        ComPtr<ID3D11ShaderResourceView> view;
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = width;
         desc.Height = height;
@@ -234,15 +242,32 @@ RenderAttempt Renderer::render_image(const std::uint32_t* rgba, int width, int h
         desc.Usage = D3D11_USAGE_DYNAMIC;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-        hr = d.device->CreateTexture2D(&desc, nullptr, &d.texture);
+#ifdef RXPCE_REVIEW_V160_TEST
+        if (rxpce_review_v160::before_texture && FAILED(hr = rxpce_review_v160::before_texture()))
+            return {hr, false};
+#endif
+        hr = d.device->CreateTexture2D(&desc, nullptr, &texture);
         if (FAILED(hr))
             return {hr, false};
-        hr = d.device->CreateShaderResourceView(d.texture.Get(), nullptr, &d.view);
+#ifdef RXPCE_REVIEW_V160_TEST
+        if (rxpce_review_v160::before_srv && FAILED(hr = rxpce_review_v160::before_srv()))
+            return {hr, false};
+#endif
+        hr = d.device->CreateShaderResourceView(texture.Get(), nullptr, &view);
         if (FAILED(hr))
             return {hr, false};
+        ID3D11ShaderResourceView* empty = nullptr;
+        d.context->PSSetShaderResources(0, 1, &empty);
+        d.texture = std::move(texture);
+        d.view = std::move(view);
         d.source_width = width;
         d.source_height = height;
     }
+#ifdef RXPCE_REVIEW_V160_TEST
+    if (rxpce_review_v160::before_upload &&
+        !rxpce_review_v160::before_upload(d.texture.Get(), d.view.Get(), width, height))
+        return {E_ABORT, false}; // Test refuses an unsafe upload; never execute an overflow.
+#endif
     D3D11_MAPPED_SUBRESOURCE mapped;
     hr = d.context->Map(d.texture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     if (FAILED(hr))

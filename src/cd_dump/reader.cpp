@@ -1,8 +1,29 @@
 #include "transport.h"
 #include <stdexcept>
 namespace rxpce_cd_dump {
+std::string read_inquiry(Transport& drive) {
+    const auto bytes = drive.execute({0x12, 0, 0, 0, 96, 0}, 96);
+    if (bytes.size() < 36 || (bytes[0] & 31) != 5)
+        throw std::runtime_error("Device is not an optical drive");
+    std::string identity;
+    identity.reserve(28 * 4);
+    constexpr char digits[] = "0123456789ABCDEF";
+    for (unsigned n = 8; n < 36; ++n) {
+        const auto byte = bytes[n];
+        if (byte == '\\')
+            identity += "\\\\";
+        else if (byte >= 0x20 && byte <= 0x7e)
+            identity += static_cast<char>(byte);
+        else {
+            identity += "\\x";
+            identity += digits[byte >> 4];
+            identity += digits[byte & 15];
+        }
+    }
+    return identity;
+}
 Toc read_toc(Transport& drive) {
-    return parse_toc(drive.execute({0x43,0,0,0,0,0,0,3,0x24,0}, 804));
+    return parse_toc(drive.execute({0x43, 0, 0, 0, 0, 0, 0, 3, 0x24, 0}, 804));
 }
 void read_session(Transport& drive) {
     validate_single_session(drive.execute({0x43,0,1,0,0,0,0,0,12,0}, 12));
