@@ -1,12 +1,8 @@
-# rxpce 1.6.0
+# rxpce 1.7.0
 
-この作業ツリーは1.6.0公開後の開発版です。以下の互換性情報はこの開発版に適用されます。
+**公開版1.6.0以前のステート・リプレイは読み込めません。** PHP・SEIの修正に伴い、意味互換性のためステート4種のGUIDを更新しています。この変更前の開発版で作成したファイルも対象です。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-This working tree is a development build after v1.6.0. The compatibility notice below applies to this development build.
-
-**公開版1.6.0以前のステート・リプレイは読み込めません。** PHP・SEIの修正に伴い、意味互換性のためステート4種のGUIDを更新しています。この変更前の開発版で作成したファイルも対象です。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[開発中の変更とリリースノート](RELEASE_NOTES.md)を参照してください。
-
-**States and replays from official releases up to 1.6.0 cannot be loaded.** The PHP/SEI fixes update all four state GUIDs for semantic compatibility. Files created by development builds before this change are also incompatible. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See [development changes and release notes](RELEASE_NOTES.md) for details.
+**States and replays from official releases up to 1.6.0 cannot be loaded.** The PHP/SEI fixes update all four state GUIDs for semantic compatibility. Files created by development builds before this change are also incompatible. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See [release notes](RELEASE_NOTES.md) for details.
 
 PCエンジンエミュレーター **rxpce** の導入案内です。アプリケーションのUIは英語です。[English translation](#english) follows the Japanese text.
 
@@ -76,11 +72,11 @@ Explorerからゲーム表示領域へ`.pce`／`.zip`／`.cue`／`.chd`を**1個
 
 通常のゲーム速度で遊ぶ場合は`Automatic frame skip (60 Hz)`を有効にしてください。F2でこれを無効にすると速度制限が外れ、ゲームが高速に進みます。
 
-### 1.6.0の主な変更
+### 1.7.0の主な変更
 
-全体とPSG／CD-DA／ADPCMの個別音量・Mute、およびPCE／ZIP／CUE／CHDのドラッグ＆ドロップを追加しました。マスク済みIRQによる受付遅延の干渉を修正し、音声初期化失敗の通知とセッション開始時のFPS集計も整えました。詳細は[リリースノート](RELEASE_NOTES.md)を参照してください。
+PHP・SEIのCPU動作、描画・音声出力の障害復旧、メモリーツールの入力管理、バックアップRAM保存と不正状態の検査、Unicode表示とCD取り込みツールを修正しました。詳細と性能上の留意点は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-### 開発版への更新
+### 1.7.0への更新
 
 **公開版1.6.0以前のステート・リプレイは読み込めません。** 該当する版から更新する場合はゲームを新規起動し、新しいステートを作成してください。`Accurate`の`.st0`と`Fast`の`.fst0`も相互に読み込めません。ゲーム内セーブ用の`backup.dat`と`.ram`、設定用の`rxpce.json`は引き続き利用できます。
 
@@ -114,7 +110,7 @@ See the [CD capture tool](CD_DUMP.md#english) for creating CUE/BIN images from p
 
 See [Building](BUILDING.md#english) for source builds and the [CUE conversion helper](CUE_MATERIALIZE.md#english) for preparing CUE/BIN pregaps before CHD conversion.
 
-| Feature | Support in 1.6.0 |
+| Feature | Support in 1.7.0 |
 | --- | --- |
 | Systems | PC Engine HuCard, CD-ROM² and SUPER CD-ROM² |
 | HuCard files | `.pce`, or the first `.pce` inside a ZIP; special HuCard mappings for Populous and Street Fighter II' |
@@ -162,11 +158,11 @@ You can also drop **one** `.pce`, `.zip`, `.cue` or `.chd` from Explorer onto th
 
 Keep `Automatic frame skip (60 Hz)` enabled for normal play. Disabling it with F2 removes the speed limit and makes the game run faster.
 
-### Changes in 1.6.0
+### Changes in 1.7.0
 
-Added master and individual PSG/CD-DA/ADPCM volume controls, Mute, and PCE/ZIP/CUE/CHD drag and drop. Fixed masked IRQ delay interference, added audio initialization failure notifications, and reset FPS accounting at each session start. See the [release notes](RELEASE_NOTES.md#english) for details.
+Fixed PHP/SEI CPU behavior, graphics and audio recovery, memory-tool input handling, backup RAM saving and state validation, Unicode display and the CD capture tool. See the [release notes](RELEASE_NOTES.md#english) for details and the performance note.
 
-### Updating to this development build
+### Updating to 1.7.0
 
 **States and replays from official releases up to 1.6.0 cannot be loaded.** When updating from one of those builds, start games normally and create new states and recordings. `Accurate` `.st0` and `Fast` `.fst0` states remain separate. Game saves in `backup.dat` and `.ram`, and settings in `rxpce.json`, remain usable.
 

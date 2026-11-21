@@ -1,12 +1,8 @@
-# rxpce 1.6.0 操作説明書 / User Manual
+# rxpce 1.7.0 操作説明書 / User Manual
 
-この作業ツリーは1.6.0公開後の開発版です。以下の互換性情報はこの開発版に適用されます。
+**公開版1.6.0以前のステート・リプレイは読み込めません。** PHP・SEIの修正に伴い、意味互換性のためステート4種のGUIDを更新しています。この変更前の開発版で作成したファイルも対象です。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[リリースノート](RELEASE_NOTES.md)を参照してください。
 
-This working tree is a development build after v1.6.0. The compatibility notice below applies to this development build.
-
-**公開版1.6.0以前のステート・リプレイは読み込めません。** PHP・SEIの修正に伴い、意味互換性のためステート4種のGUIDを更新しています。この変更前の開発版で作成したファイルも対象です。ゲームを新規起動して作り直してください。ゲーム内セーブと設定、入力プロファイル、チート定義は引き続き利用できます。変更内容は[開発中の変更とリリースノート](RELEASE_NOTES.md)を参照してください。
-
-**States and replays from official releases up to 1.6.0 cannot be loaded.** The PHP/SEI fixes update all four state GUIDs for semantic compatibility. Files created by development builds before this change are also incompatible. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See [development changes and release notes](RELEASE_NOTES.md) for details.
+**States and replays from official releases up to 1.6.0 cannot be loaded.** The PHP/SEI fixes update all four state GUIDs for semantic compatibility. Files created by development builds before this change are also incompatible. Start games normally and create new states and recordings. In-game saves and settings, input profiles and cheat definitions remain usable. See [release notes](RELEASE_NOTES.md) for details.
 
 導入と動作環境は[README](README.md)を参照してください。UIの英語表記をそのまま使って説明します。[English translation](#english) follows the Japanese text.
 
